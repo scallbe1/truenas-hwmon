@@ -1,0 +1,25 @@
+{
+  "system_name": "TrueNAS",
+  "motherboard_name": "ASRock Z590 Taichi",
+  "fan_labels": {
+    "fan1": "Unknown fan 1",
+    "fan2": "Unknown fan 2",
+    "fan3": "Unknown fan 3",
+    "fan4": "Unknown fan 4",
+    "fan5": "Unknown fan 5",
+    "fan6": "Unknown fan 6"
+  },
+  "physical_headers": [
+    "CPU_FAN1",
+    "CPU_FAN2/WP",
+    "CHA_FAN1/WP",
+    "CHA_FAN2/WP",
+    "CHA_FAN3/WP",
+    "CHA_FAN4/WP",
+    "CHA_FAN5/WP",
+    "CHA_FAN6/WP"
+  ],
+  "temperature_warn_c": 70,
+  "temperature_critical_c": 85,
+  "fan_min_rpm": 250
+}

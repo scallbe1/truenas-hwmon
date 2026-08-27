@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>TrueNAS Hardware Monitor</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg:#0b1016; --panel:#131b24; --panel2:#18232f; --text:#e9f0f7; --muted:#8ea0b2;
+      --line:#263546; --good:#5fd39a; --warn:#f2c96d; --bad:#ff7272; --accent:#70a7ff;
+    }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter,Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
+    header { padding:22px 26px 12px; display:flex; justify-content:space-between; gap:20px; align-items:flex-end; }
+    h1 { margin:0; font-size:24px; letter-spacing:.2px; }
+    .sub { color:var(--muted); margin-top:5px; font-size:13px; }
+    #updated { color:var(--muted); font-size:12px; }
+    main { padding:12px 26px 28px; max-width:1500px; margin:auto; }
+    .grid { display:grid; grid-template-columns:repeat(12,1fr); gap:14px; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; min-width:0; }
+    .span4 { grid-column:span 4; } .span8 { grid-column:span 8; } .span12 { grid-column:span 12; }
+    .panel h2 { margin:0 0 13px; font-size:15px; font-weight:650; }
+    .metric-big { font-size:38px; font-weight:700; line-height:1; }
+    .metric-big small { font-size:16px; color:var(--muted); }
+    .sensor-list { margin-top:14px; display:grid; gap:8px; }
+    .sensor { display:grid; grid-template-columns:minmax(120px,1fr) auto; gap:10px; padding:7px 0; border-top:1px solid rgba(255,255,255,.04); }
+    .sensor .label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .sensor .value { font-variant-numeric:tabular-nums; }
+    table { width:100%; border-collapse:collapse; }
+    th,td { padding:9px 8px; text-align:left; border-bottom:1px solid rgba(255,255,255,.055); font-size:13px; }
+    th { color:var(--muted); font-weight:600; }
+    td.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .badge { padding:3px 7px; border-radius:999px; font-size:11px; background:var(--panel2); color:var(--muted); }
+    .running { color:var(--good); } .stopped,.stopped-or-unused { color:var(--muted); } .low { color:var(--warn); }
+    .bar { width:120px; height:7px; border-radius:6px; background:#253241; overflow:hidden; display:inline-block; vertical-align:middle; }
+    .bar > span { display:block; height:100%; background:var(--accent); }
+    .spark { width:100%; height:64px; margin-top:12px; display:block; }
+    .spark polyline { fill:none; stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; }
+    .empty { color:var(--muted); font-size:13px; padding:6px 0; }
+    .error { border-color:#6e2a2a; color:#ffaaaa; }
+    .footer { margin-top:14px; color:var(--muted); font-size:11px; }
+    @media(max-width:900px){ .span4,.span8 { grid-column:span 12; } header{align-items:flex-start;flex-direction:column;} }
+  </style>
+</head>
+<body>
+<header>
+  <div><h1>TrueNAS Hardware Monitor</h1><div class="sub" id="subtitle">Loading hardware sensors…</div></div>
+  <div id="updated"></div>
+</header>
+<main>
+  <div class="grid">
+    <section class="panel span4" id="cpu-panel"><h2>CPU</h2><div id="cpu"></div></section>
+    <section class="panel span4" id="board-panel"><h2>Motherboard</h2><div id="board"></div></section>
+    <section class="panel span4"><h2>Sensor devices</h2><div id="devices"></div></section>
+    <section class="panel span12"><h2>Physical fan headers</h2><div id="headers"></div></section>
+    <section class="panel span12"><h2>Fans</h2><div id="fans"></div></section>
+    <section class="panel span12"><h2>Other temperatures</h2><div id="other"></div></section>
+  </div>
+  <div class="footer">Read-only monitoring. PWM values are displayed but never written.</div>
+</main>
+<script>
+let history = {};
+function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
+function tempClass(v,warn,crit){ if(v==null)return ''; if(v>=crit)return 'bad'; if(v>=warn)return 'warn'; return 'good'; }
+function sparkline(id){
+  const pts=(history[id]||[]).slice(-120); if(pts.length<2)return '';
+  const vals=pts.map(p=>p[1]), min=Math.min(...vals), max=Math.max(...vals), span=(max-min)||1;
+  const xy=vals.map((v,i)=>`${(i/(vals.length-1))*100},${58-((v-min)/span)*52}`).join(' ');
+  return `<svg class="spark" viewBox="0 0 100 64" preserveAspectRatio="none"><polyline points="${xy}"/></svg>`;
+}
+function tempBlock(group, warn, crit){
+  const arr=group.temperatures||[];
+  if(!arr.length)return '<div class="empty">No sensors exposed</div>';
+  const hot=group.hottest_c;
+  return `<div class="metric-big">${hot!=null?hot.toFixed(1):'—'}<small> °C hottest</small></div>`+
+    (arr[0]?sparkline(arr[0].id):'')+
+    `<div class="sensor-list">${arr.map(s=>`<div class="sensor"><div class="label">${esc(s.label)}</div><div class="value">${Number(s.celsius).toFixed(1)} °C</div></div>`).join('')}</div>`;
+}
+function renderHeaders(headers, fans){
+  if(!headers.length)return '<div class="empty">No physical-header inventory configured</div>';
+  const exposed=fans.length;
+  return `<div class="sub" style="margin-bottom:10px">Board inventory: ${headers.length} physical headers · Linux currently exposes ${exposed} logical fan/PWM channels. Physical-to-logical mapping remains configurable until identified.</div>`+
+    `<div style="display:flex;flex-wrap:wrap;gap:8px">${headers.map(h=>`<span class="badge">${esc(h)}</span>`).join('')}</div>`;
+}
+function renderFans(fans){
+  if(!fans.length)return '<div class="empty">No fan sensors exposed</div>';
+  return `<table><thead><tr><th>Header / label</th><th>Kernel</th><th class="num">RPM</th><th>PWM</th><th>Status</th></tr></thead><tbody>`+
+    fans.map(f=>{let p=f.pwm_percent;return `<tr><td>${esc(f.label)}</td><td><span class="badge">${esc(f.kernel_name)}</span></td><td class="num">${f.rpm==null?'—':f.rpm}</td><td>${p==null?'—':`<span class="bar"><span style="width:${Math.max(0,Math.min(100,p))}%"></span></span> &nbsp;${p}%`}</td><td class="${esc(f.state)}">${esc(f.state.replaceAll('-',' '))}${f.pwm_writable?' · writable':''}</td></tr>`}).join('')+
+    `</tbody></table>`;
+}
+function renderOther(arr){
+  if(!arr.length)return '<div class="empty">No additional temperature sensors exposed</div>';
+  return `<table><thead><tr><th>Device</th><th>Sensor</th><th class="num">Temperature</th></tr></thead><tbody>${arr.map(s=>`<tr><td>${esc(s.chip)}</td><td>${esc(s.label)}</td><td class="num">${Number(s.celsius).toFixed(1)} °C</td></tr>`).join('')}</tbody></table>`;
+}
+function renderDevices(arr){
+  if(!arr.length)return '<div class="empty">No hwmon devices found</div>';
+  return `<div class="sensor-list">${arr.map(d=>`<div class="sensor"><div class="label">${esc(d.name)}</div><div class="value">${d.temperatures}T / ${d.fans}F</div></div>`).join('')}</div>`;
+}
+async function refreshHistory(){ try{ const r=await fetch('/api/history',{cache:'no-store'}); const j=await r.json(); history=j.series||{}; }catch(e){} }
+async function refresh(){
+  try{
+    const r=await fetch('/api/status',{cache:'no-store'}), s=await r.json();
+    if(s.error) throw new Error(s.error);
+    const w=s.thresholds?.warn_c??70,c=s.thresholds?.critical_c??85;
+    document.getElementById('subtitle').textContent=`${s.system_name} · ${s.motherboard_name}`;
+    document.getElementById('updated').textContent=`Updated ${new Date(s.timestamp*1000).toLocaleTimeString()}`;
+    document.getElementById('cpu').innerHTML=tempBlock(s.cpu,w,c);
+    document.getElementById('board').innerHTML=tempBlock(s.motherboard,w,c);
+    document.getElementById('headers').innerHTML=renderHeaders(s.physical_headers||[],s.fans||[]);
+    document.getElementById('fans').innerHTML=renderFans(s.fans||[]);
+    document.getElementById('other').innerHTML=renderOther(s.other_temperatures||[]);
+    document.getElementById('devices').innerHTML=renderDevices(s.devices||[]);
+  } catch(e){ document.getElementById('subtitle').textContent='Unable to read host hwmon sensors'; document.getElementById('cpu-panel').classList.add('error'); document.getElementById('cpu').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+}
+refreshHistory().then(refresh);
+setInterval(refresh,2000);
+setInterval(refreshHistory,10000);
+</script>
+</body>
+</html>

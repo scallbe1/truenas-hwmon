@@ -1,0 +1,23 @@
+services:
+  truenas-hwmon:
+    build: .
+    image: truenas-hwmon:latest
+    container_name: truenas-hwmon
+    restart: unless-stopped
+    ports:
+      - "30200:8080"
+    environment:
+      HOST_SYS: /host/sys
+      CONFIG_PATH: /config/config.json
+      POLL_INTERVAL: "2"
+      HISTORY_MINUTES: "60"
+    volumes:
+      - /sys:/host/sys:ro
+      - ./config:/config:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
