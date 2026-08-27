@@ -1,49 +1,54 @@
-# TrueNAS Hardware Monitor
+# TrueNAS Hardware Monitor v2.2
 
-A lightweight, read-only live hardware and resource dashboard for TrueNAS SCALE/Linux.
+A compact, live hardware/resource dashboard for TrueNAS SCALE/Linux, designed around the ASRock Z590 Taichi / Nuvoton NCT6686D and NVIDIA GPUs.
 
-It was designed around an ASRock Z590 Taichi / Nuvoton NCT6686D system with an NVIDIA RTX GPU, but the Linux sensor discovery is generic.
+## Dashboard
 
-## Live dashboard
+The desktop layout is intentionally constrained to one browser screen and refreshes once per second. It shows:
 
-The dashboard refreshes once per second by default and shows:
+- CPU utilization/load and every exposed package/core temperature
+- System RAM used/available/total
+- NVIDIA GPU utilization, VRAM, temperature, fan, power, memory-engine utilization and P-state via NVML
+- Every NCT6686D motherboard temperature
+- Every exposed fan RPM and PWM duty plus the eight configured physical Z590 Taichi headers
+- Physical disk/NVMe temperature and live read/write throughput
+- A consolidated **All temperatures** matrix so CPU, motherboard, storage and other hwmon temperatures are visible without scrolling
+- Right-side independent rankings:
+  - Top 5 CPU processes
+  - Top 5 network containers/network namespaces
+  - Top 5 disk-I/O processes
+- Container/app/service identity plus the process inside it when Docker metadata is available
+- Linear RAM bars in each Top-5 list, so larger memory users are always represented by proportionally larger bars
+- 60 minutes of selected telemetry history in RAM for sparklines
 
-- CPU utilization, load average, package/core temperatures
-- Ordinary system RAM used/available/total
-- NVIDIA GPU utilization through NVML
-- NVIDIA VRAM used/total and percentage
-- NVIDIA GPU temperature, power, fan percentage, memory-engine utilization and P-state
-- NCT6686D motherboard temperatures
-- Fan tachometer RPM and current PWM duty
-- Eight configured physical Z590 Taichi fan headers vs. the logical channels exposed by Linux
-- Physical disk/NVMe temperatures
-- Live read and write throughput per physical disk
-- A live right-side process table showing CPU, RAM, GPU VRAM and per-process read/write rates when Linux permits those counters
-- 60 minutes of selected in-memory history for sparklines
+The app never writes fan/PWM controls and NVML monitoring does not allocate model VRAM.
 
-The app **never writes to PWM controls** and does not create a CUDA compute context. NVIDIA telemetry uses NVML only.
+### Network accounting note
 
-## TrueNAS host prerequisite for Z590 Taichi fan sensors
+Linux `/proc` exposes network byte counters per **network namespace**, not truthful per-process network byte totals. v2.2 therefore ranks network namespaces/containers and shows the busiest process(es) in that namespace for context. It does not falsely assign the entire container's traffic to one process. True per-process network attribution would require a privileged packet/eBPF collector.
 
-Load the NCT6686D-compatible driver on the TrueNAS host:
+## Z590 Taichi sensor prerequisite
 
 ```sh
 modprobe nct6683 force=1
 ```
 
-Verify:
+To persist it as a TrueNAS Post Init command:
 
 ```sh
-dmesg | grep -iE 'nct6683|nct6686'
+midclt call initshutdownscript.create '{
+  "type": "COMMAND",
+  "command": "modprobe nct6683 force=1",
+  "when": "POSTINIT",
+  "enabled": true,
+  "timeout": 10,
+  "comment": "Load Z590 Taichi NCT6686D hwmon driver"
+}'
 ```
 
-For persistence in TrueNAS, add `modprobe nct6683 force=1` as a **Post Init** command in System Settings -> Advanced -> Init/Shutdown Scripts.
+## GitHub / GHCR
 
-## GitHub / GHCR build
-
-The included `.github/workflows/docker-publish.yml` runs the mock host telemetry test and publishes the image to GitHub Container Registry whenever you push to the default branch.
-
-For this repository the image is:
+The included workflow tests the mock telemetry host and publishes:
 
 ```text
 ghcr.io/scallbe1/truenas-hwmon:latest
@@ -51,33 +56,21 @@ ghcr.io/scallbe1/truenas-hwmon:latest
 
 ## TrueNAS Custom App
 
-Use the included `truenas-custom-app.yml`. Important host interfaces are mounted read-only:
+Use `truenas-custom-app.yml`.
+
+The app mounts host telemetry and Docker metadata read-only:
 
 ```yaml
 volumes:
   - /sys:/host/sys:ro
   - /proc:/host/proc:ro
+  - /mnt/.ix-apps/docker/containers:/host/docker/containers:ro
   - /mnt/pool1/truenas-hwmon/config:/config:ro
 ```
 
-The NVIDIA runtime is requested only so NVML can inspect the GPU:
+Docker metadata is used only to translate cgroup container IDs into useful app/container/service names; the Docker socket is **not** mounted.
 
-```yaml
-deploy:
-  resources:
-    reservations:
-      devices:
-        - driver: nvidia
-          count: all
-          capabilities:
-            - gpu
-
-environment:
-  NVIDIA_VISIBLE_DEVICES: all
-  NVIDIA_DRIVER_CAPABILITIES: utility
-```
-
-This does not reserve VRAM or load a model. It allows the monitor to query GPU state while ComfyUI is using the GPU.
+The process sampler runs as root with only `SYS_PTRACE` added so Linux permits reading process I/O and namespace metadata across differing host/container UIDs. The container filesystem and every host mount remain read-only, all other capabilities are dropped, and `no-new-privileges` remains enabled.
 
 Open:
 
@@ -85,53 +78,30 @@ Open:
 http://TRUENAS-IP:30200
 ```
 
+The page is served with `Cache-Control: no-store` and displays **v2.2** beside the title so it is obvious when the new image is actually running.
+
 ## Fan labels
 
-Edit `/mnt/pool1/truenas-hwmon/config/config.json` as physical motherboard headers are identified:
-
-```json
-{
-  "fan_labels": {
-    "fan1": "CPU_FAN1",
-    "fan2": "CPU_FAN2/WP",
-    "fan3": "CHA_FAN1/WP",
-    "fan4": "CHA_FAN2/WP",
-    "fan5": "CHA_FAN3/WP",
-    "fan6": "CHA_FAN4/WP"
-  }
-}
-```
-
-No image rebuild is needed for label changes because configuration is re-read during polling.
-
-## Security model
-
-- `/sys` and `/proc` are mounted read-only.
-- The container runs as UID 10001, not root.
-- All Linux capabilities are dropped.
-- `no-new-privileges` is enabled.
-- The container filesystem is read-only except a small `/tmp` tmpfs.
-- No Docker socket is mounted.
-- There is no API for writing fan/PWM values.
-- Per-process `/proc/<pid>/io` is treated as optional; when Linux does not allow that counter, the UI displays `—` instead of requesting elevated privileges.
+Edit `/mnt/pool1/truenas-hwmon/config/config.json` as physical headers are identified. No image rebuild is needed.
 
 ## API
 
-- `GET /api/status` - latest full telemetry snapshot
-- `GET /api/history` - in-memory history series
-- `GET /api/config` - effective configuration
-- `GET /health` - service, hwmon and NVIDIA discovery status
+- `GET /api/status` — current sensors plus `top_cpu`, `top_network`, `top_disk`
+- `GET /api/history` — selected in-memory history
+- `GET /api/config` — effective configuration
+- `GET /health` — sensor/NVIDIA discovery information
 
 ## Environment variables
 
 | Variable | Default | Purpose |
 |---|---:|---|
-| `HOST_SYS` | `/host/sys` | Host sysfs mount |
-| `HOST_PROC` | `/host/proc` | Host procfs mount |
+| `HOST_SYS` | `/host/sys` | Host sysfs |
+| `HOST_PROC` | `/host/proc` | Host procfs |
+| `DOCKER_CONTAINERS_ROOT` | `/host/docker/containers` | Read-only Docker metadata |
 | `CONFIG_PATH` | `/config/config.json` | Friendly labels/settings |
-| `POLL_INTERVAL` | `1` | Backend polling interval in seconds |
-| `HISTORY_MINUTES` | `60` | In-memory history retention |
-| `PROCESS_LIMIT` | `18` | Maximum live processes returned |
+| `POLL_INTERVAL` | `1` | Polling interval in seconds |
+| `HISTORY_MINUTES` | `60` | In-memory history |
+| `PROCESS_LIMIT` | `20` | General process API limit |
 
 ## Tests
 
@@ -141,4 +111,4 @@ python3 tests/make_mock_hwmon.py
 PYTHONPATH=. python3 tests/test_mock.py
 ```
 
-The mock host includes the Z590 Taichi readings used during development, a physical disk temperature, memory counters, disk I/O, and a changing process sample.
+The mock verifies NCT6686D sensors, disk temperature/I/O, memory, container-name resolution, per-process CPU/disk I/O and network-namespace throughput.

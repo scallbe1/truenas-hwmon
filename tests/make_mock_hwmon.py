@@ -1,14 +1,18 @@
 from pathlib import Path
+import json
 import os
 import shutil
 
 sysroot = Path('/tmp/mock-sys')
 procroot = Path('/tmp/mock-proc')
+dockerroot = Path('/tmp/mock-docker')
 shutil.rmtree(sysroot, ignore_errors=True)
 shutil.rmtree(procroot, ignore_errors=True)
+shutil.rmtree(dockerroot, ignore_errors=True)
 base = sysroot / 'class' / 'hwmon'
 base.mkdir(parents=True, exist_ok=True)
 procroot.mkdir(parents=True, exist_ok=True)
+dockerroot.mkdir(parents=True, exist_ok=True)
 
 
 def put_dir(path: Path, name: str, files: dict[str, object]):
@@ -62,6 +66,20 @@ os.symlink('../../devices/mock/block/sda/device/hwmon/hwmon2', base / 'hwmon2')
 (procroot / 'stat').write_text('cpu  1000 0 500 5000 100 0 0 0 0 0\n')
 (procroot / 'diskstats').write_text('8 0 sda 100 0 10000 0 50 0 20000 0 0 0 0\n')
 
+cid = 'a' * 64
+cdir = dockerroot / cid
+cdir.mkdir()
+(cdir / 'config.v2.json').write_text(json.dumps({
+    'Name': '/ix-mock-worker-1',
+    'Config': {
+        'Image': 'example/mock:latest',
+        'Labels': {
+            'com.docker.compose.project': 'ix-mock',
+            'com.docker.compose.service': 'worker',
+        },
+    },
+}))
+
 p = procroot / '4242'
 p.mkdir()
 # Parser needs fields through stime; state is field 3, utime/stime are fields 14/15.
@@ -70,6 +88,17 @@ rest = ['S','1','1','1','0','0','0','0','0','0','0','100','20','0','0','0','0','
 (p / 'statm').write_text('100000 25000 0 0 0 0 0\n')
 (p / 'cmdline').write_bytes(b'python\x00mock_worker.py\x00')
 (p / 'io').write_text('read_bytes: 1000000\nwrite_bytes: 2000000\n')
+(p / 'cgroup').write_text(f'0::/docker/{cid}\n')
+(p / 'ns').mkdir()
+os.symlink('net:[4026532999]', p / 'ns' / 'net')
+(p / 'net').mkdir()
+(p / 'net' / 'dev').write_text(
+    'Inter-|   Receive                                                |  Transmit\n'
+    ' face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n'
+    '  eth0: 1000000 100 0 0 0 0 0 0 2000000 100 0 0 0 0 0 0\n'
+    '    lo: 500000 10 0 0 0 0 0 0 500000 10 0 0 0 0 0 0\n'
+)
 
 print(sysroot)
 print(procroot)
+print(dockerroot)

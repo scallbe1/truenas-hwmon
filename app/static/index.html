@@ -5,230 +5,100 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>TrueNAS Hardware Monitor</title>
   <style>
-    :root {
-      color-scheme: dark;
-      --bg:#081019; --panel:#101a26; --panel2:#152231; --text:#edf4fb; --muted:#91a5b9;
-      --line:#24364a; --good:#5ed5a1; --warn:#efc76b; --bad:#ff7676; --accent:#75aaff;
-      --cyan:#69d2e7; --purple:#b99cff;
-    }
-    * { box-sizing:border-box; }
-    html,body { margin:0; min-height:100%; }
-    body { font-family:Inter,Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
-    header { height:48px; padding:8px 14px 5px; display:flex; justify-content:space-between; gap:12px; align-items:center; max-width:1920px; margin:auto; }
-    h1 { margin:0; font-size:18px; line-height:1.1; letter-spacing:.1px; }
-    .sub { color:var(--muted); margin-top:2px; font-size:10px; line-height:1.2; }
-    #updated { color:var(--muted); font-size:10px; white-space:nowrap; }
-    main { height:calc(100vh - 48px); padding:4px 10px 8px; max-width:1920px; margin:auto; overflow:hidden; }
-    .layout { height:100%; display:grid; grid-template-columns:minmax(0,3.35fr) minmax(335px,1fr); gap:8px; align-items:stretch; }
-    .left { height:100%; display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); grid-template-rows:minmax(0,.82fr) minmax(0,1.04fr) minmax(0,1.14fr); gap:8px; min-width:0; min-height:0; }
-    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 9px; min-width:0; min-height:0; overflow:hidden; }
-    .span3 { grid-column:span 3; } .span4 { grid-column:span 4; } .span5 { grid-column:span 5; } .span6 { grid-column:span 6; } .span7 { grid-column:span 7; } .span8 { grid-column:span 8; } .span9 { grid-column:span 9; } .span12 { grid-column:span 12; }
-    .panel h2 { margin:0 0 5px; font-size:11px; line-height:1.1; font-weight:750; letter-spacing:.12px; }
-    .panel-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; }
-    .panel-title-row h2 { margin:0; }
-    .metric-big { font-size:25px; font-weight:760; line-height:1; font-variant-numeric:tabular-nums; }
-    .metric-big small { font-size:10px; color:var(--muted); font-weight:500; }
-    .metric-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; color:var(--muted); font-size:9px; line-height:1.2; }
-    .metric-row strong { color:var(--text); font-weight:650; font-variant-numeric:tabular-nums; }
-    .sensor-list { margin-top:4px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 12px; }
-    .sensor { display:grid; grid-template-columns:minmax(70px,1fr) auto; gap:6px; padding:2px 0; border-top:1px solid rgba(255,255,255,.035); font-size:9px; line-height:1.25; }
-    .sensor .label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
-    .sensor .value { font-variant-numeric:tabular-nums; white-space:nowrap; }
-    table { width:100%; border-collapse:collapse; table-layout:fixed; }
-    th,td { padding:3px 4px; text-align:left; border-bottom:1px solid rgba(255,255,255,.045); font-size:9px; line-height:1.15; vertical-align:middle; }
-    th { color:var(--muted); font-weight:650; background:var(--panel); }
-    td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
-    .badge { padding:1px 4px; border-radius:999px; font-size:8px; line-height:1.25; background:var(--panel2); color:var(--muted); display:inline-block; white-space:nowrap; }
-    .running,.good { color:var(--good); } .stopped,.stopped-or-unused,.muted { color:var(--muted); } .low,.warn { color:var(--warn); } .bad { color:var(--bad); }
-    .bar { width:58px; height:4px; border-radius:4px; background:#253547; overflow:hidden; display:inline-block; vertical-align:middle; }
-    .bar > span { display:block; height:100%; background:var(--accent); }
-    .bar.cyan > span { background:var(--cyan); } .bar.purple > span { background:var(--purple); }
-    .spark { width:100%; height:22px; margin-top:3px; display:block; }
-    .spark polyline { fill:none; stroke:var(--accent); stroke-width:1.5; vector-effect:non-scaling-stroke; }
-    .spark.cyan polyline { stroke:var(--cyan); } .spark.purple polyline { stroke:var(--purple); }
-    .empty { color:var(--muted); font-size:9px; padding:3px 0; }
-    .error { border-color:#6e2a2a; color:#ffaaaa; }
-    .footer { display:none; }
-    .process-panel { padding:0; height:100%; overflow:hidden; display:flex; flex-direction:column; }
-    .process-head { padding:7px 8px 5px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:6px; flex:0 0 auto; }
-    .process-head h2 { margin:0; }
-    .process-scroll { overflow:hidden; flex:1 1 auto; min-height:0; }
-    .process-scroll table { height:auto; }
-    .proc-name { width:48%; }
-    .proc-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:650; }
-    .proc-cmd { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:7px; margin-top:1px; }
-    .hot { color:var(--warn); }
-    .gpu-grid { display:grid; gap:4px; }
-    .gpu-device { padding-top:2px; }
-    .gpu-name { font-weight:650; margin-bottom:4px; font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .gpu-stats { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:5px; }
-    .gpu-stat small { color:var(--muted); display:block; margin-bottom:1px; font-size:7px; text-transform:uppercase; letter-spacing:.25px; white-space:nowrap; }
-    .gpu-stat strong { font-size:12px; line-height:1.05; font-variant-numeric:tabular-nums; white-space:nowrap; }
-    .disk-model { color:var(--muted); font-size:7px; display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
-    .io-read { color:var(--cyan); } .io-write { color:var(--purple); }
-    .header-badges { display:flex; flex-wrap:nowrap; gap:3px; overflow:hidden; min-width:0; }
-    .mini-note { color:var(--muted); font-size:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .combined-sensors { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr); gap:8px; height:calc(100% - 16px); min-height:0; }
-    .combined-sensors > div { min-width:0; overflow:hidden; }
-    #fans table th:nth-child(1){width:30%} #fans table th:nth-child(2){width:13%} #fans table th:nth-child(3){width:12%} #fans table th:nth-child(4){width:27%} #fans table th:nth-child(5){width:18%}
-    #disks table th:nth-child(1){width:44%} #disks table th:nth-child(2){width:16%} #disks table th:nth-child(3){width:20%} #disks table th:nth-child(4){width:20%}
-    #processes th:nth-child(1){width:47%} #processes th:nth-child(2){width:12%} #processes th:nth-child(3){width:16%} #processes th:nth-child(4){width:13%} #processes th:nth-child(5){width:12%}
-    @media(max-width:1250px), (max-height:720px){
-      main { height:auto; overflow:visible; }
-      .layout { height:auto; grid-template-columns:1fr; }
-      .left { height:auto; grid-template-rows:none; }
-      .process-panel { height:auto; }
-      .process-scroll { overflow:visible; }
-      .footer { display:block; margin-top:8px; color:var(--muted); font-size:9px; }
-    }
-    @media(max-width:900px){ .span3,.span4,.span5,.span6,.span7,.span8,.span9 { grid-column:span 12; } header{height:auto;align-items:flex-start;flex-direction:column;} main{height:auto;} .gpu-stats{grid-template-columns:repeat(3,1fr);} .sensor-list{grid-template-columns:1fr;} .combined-sensors{grid-template-columns:1fr;} }
+    :root{color-scheme:dark;--bg:#081019;--panel:#101a26;--panel2:#152231;--text:#edf4fb;--muted:#91a5b9;--line:#24364a;--good:#5ed5a1;--warn:#efc76b;--bad:#ff7676;--accent:#75aaff;--cyan:#69d2e7;--purple:#b99cff;--green:#6dd6a7}
+    *{box-sizing:border-box} html,body{margin:0;width:100%;height:100%;overflow:hidden} body{font-family:Inter,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text);font-size:11px}
+    header{height:38px;padding:5px 10px 4px;display:flex;justify-content:space-between;align-items:center;gap:10px;border-bottom:1px solid rgba(255,255,255,.025)}
+    h1{margin:0;font-size:16px;line-height:1}.sub{color:var(--muted);font-size:9px;margin-top:3px}.version{color:var(--cyan);font-weight:700}.updated{color:var(--muted);font-size:9px;white-space:nowrap}
+    main{height:calc(100% - 38px);padding:6px 8px 8px;overflow:hidden}.layout{height:100%;display:grid;grid-template-columns:minmax(0,3.35fr) minmax(410px,1.15fr);gap:6px;min-height:0}
+    .left{height:100%;display:grid;grid-template-columns:repeat(12,minmax(0,1fr));grid-template-rows:124px 196px minmax(0,1fr);gap:6px;min-width:0;min-height:0}.span2{grid-column:span 2}.span3{grid-column:span 3}.span4{grid-column:span 4}.span5{grid-column:span 5}.span6{grid-column:span 6}.span7{grid-column:span 7}.span8{grid-column:span 8}.span9{grid-column:span 9}.span12{grid-column:span 12}
+    .panel{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:7px 8px;min-width:0;min-height:0;overflow:hidden}.panel h2{margin:0 0 4px;font-size:10px;line-height:1.05;font-weight:760}.panel-title-row{display:flex;justify-content:space-between;align-items:center;gap:5px;margin-bottom:3px}.panel-title-row h2{margin:0}
+    .summary-grid{height:100%;display:grid;grid-template-columns:1fr 1.05fr 2.15fr;gap:6px}.metric-big{font-size:23px;font-weight:760;line-height:.95;font-variant-numeric:tabular-nums}.metric-big small{font-size:8px;color:var(--muted);font-weight:500}.metric-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:3px;color:var(--muted);font-size:8px}.metric-row strong{color:var(--text);font-variant-numeric:tabular-nums}.bar{width:56px;height:3px;border-radius:4px;background:#253547;overflow:hidden;display:inline-block;vertical-align:middle}.bar>span{display:block;height:100%;background:var(--accent)}.bar.purple>span{background:var(--purple)}.bar.cyan>span{background:var(--cyan)}
+    .spark{width:100%;height:19px;margin-top:2px;display:block}.spark polyline{fill:none;stroke:var(--accent);stroke-width:1.35;vector-effect:non-scaling-stroke}.spark.purple polyline{stroke:var(--purple)}.spark.cyan polyline{stroke:var(--cyan)}
+    .gpu-name{font-weight:700;font-size:9px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.gpu-stats{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:5px}.gpu-stat small{display:block;color:var(--muted);text-transform:uppercase;font-size:6.5px;letter-spacing:.25px}.gpu-stat strong{display:block;font-size:11px;margin-top:1px;font-variant-numeric:tabular-nums}.gpu-stat .sub{font-size:7px;margin-top:1px}
+    .temps-wrap{height:calc(100% - 17px);display:grid;grid-template-columns:1.25fr .9fr 1fr 1.1fr;gap:7px;min-height:0}.temp-group{min-width:0;border-right:1px solid rgba(255,255,255,.055);padding-right:7px}.temp-group:last-child{border-right:0;padding-right:0}.temp-head{font-size:8px;color:var(--cyan);text-transform:uppercase;letter-spacing:.35px;font-weight:750;margin-bottom:2px;display:flex;justify-content:space-between;gap:5px}.temp-list{display:grid;grid-template-columns:1fr;gap:0}.temp-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;padding:1.5px 0;border-top:1px solid rgba(255,255,255,.03);font-size:8px;line-height:1.25}.temp-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted)}.temp-value{font-variant-numeric:tabular-nums;white-space:nowrap}.warn{color:var(--warn)}
+    .bottom-grid{height:100%;display:grid;grid-template-columns:1.45fr 1fr;gap:6px;min-height:0}.subpanel{height:100%;min-height:0}.header-badges{display:flex;align-items:center;gap:3px;flex-wrap:wrap;justify-content:flex-end}.badge{padding:1px 4px;border-radius:999px;font-size:7px;line-height:1.25;background:var(--panel2);color:var(--muted);display:inline-block;white-space:nowrap}.mini-note{font-size:7px;color:var(--muted);white-space:nowrap}
+    table{width:100%;border-collapse:collapse;table-layout:fixed}th,td{padding:2.5px 4px;text-align:left;border-bottom:1px solid rgba(255,255,255,.04);font-size:8px;line-height:1.12;vertical-align:middle}th{color:var(--muted);font-weight:650;background:var(--panel)}td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}.disk-model{display:block;color:var(--muted);font-size:6.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}.running,.good{color:var(--good)}.stopped,.stopped-or-unused,.muted{color:var(--muted)}.low{color:var(--warn)}.io-read{color:var(--cyan)}.io-write{color:var(--purple)}
+    .right{height:100%;display:grid;grid-template-rows:repeat(3,minmax(0,1fr));gap:6px;min-height:0}.rank-panel{padding:0;display:flex;flex-direction:column;min-height:0}.rank-head{padding:6px 7px 4px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:6px;flex:0 0 auto}.rank-head h2{margin:0}.rank-body{flex:1;min-height:0;overflow:hidden}.rank-table td{height:34px;padding:3px 4px}.rank-main{font-weight:680;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.rank-sub{color:var(--muted);font-size:6.7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}.container-tag{color:var(--cyan)}.resource{font-variant-numeric:tabular-nums;font-weight:650}.ram-wrap{position:relative;height:16px;min-width:68px;border-radius:3px;background:#172637;overflow:hidden}.ram-fill{position:absolute;inset:0 auto 0 0;background:rgba(185,156,255,.25);border-right:1px solid rgba(185,156,255,.65)}.ram-text{position:relative;z-index:1;display:flex;align-items:center;justify-content:flex-end;height:100%;padding:0 3px;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:7px}.net-note{font-size:6.5px;color:var(--muted)}.empty{color:var(--muted);font-size:8px;padding:5px}.hot{color:var(--warn)}
+    @media(max-width:1250px){html,body{overflow:auto}main{height:auto;overflow:visible}.layout{grid-template-columns:1fr}.left{height:auto;grid-template-rows:auto}.right{height:auto;grid-template-rows:repeat(3,210px)}.summary-grid{grid-template-columns:1fr}.temps-wrap{grid-template-columns:repeat(2,1fr)}.bottom-grid{grid-template-columns:1fr}.panel{overflow:visible}.temp-group{border-right:0}.gpu-stats{grid-template-columns:repeat(3,1fr)}}
+    @media(max-height:780px) and (min-width:1251px){.left{grid-template-rows:108px 170px minmax(0,1fr)}.metric-big{font-size:20px}.gpu-stat strong{font-size:9px}.rank-table td{height:29px}.temp-row{font-size:7px;padding:1px 0}th,td{font-size:7px;padding:2px 3px}}
   </style>
 </head>
 <body>
 <header>
-  <div><h1>TrueNAS Hardware Monitor</h1><div class="sub" id="subtitle">Loading host telemetry…</div></div>
-  <div id="updated"></div>
+  <div><h1>TrueNAS Hardware Monitor <span class="version">v2.2</span></h1><div class="sub" id="subtitle">Loading host telemetry…</div></div>
+  <div class="updated" id="updated"></div>
 </header>
 <main>
   <div class="layout">
     <div class="left">
-      <section class="panel span3" id="cpu-panel"><h2>CPU</h2><div id="cpu"></div></section>
-      <section class="panel span3"><h2>Memory</h2><div id="memory"></div></section>
-      <section class="panel span6"><h2>NVIDIA GPU</h2><div id="gpu"></div></section>
-
-      <section class="panel span3" id="board-panel"><h2>Motherboard</h2><div id="board"></div></section>
-      <section class="panel span9">
-        <div class="panel-title-row"><h2>Fans</h2><div class="header-badges" id="headers"></div></div>
-        <div id="fans"></div>
+      <section class="panel span12">
+        <div class="summary-grid">
+          <div><h2>CPU</h2><div id="cpu"></div></div>
+          <div><h2>Memory</h2><div id="memory"></div></div>
+          <div><h2>NVIDIA GPU</h2><div id="gpu"></div></div>
+        </div>
       </section>
 
-      <section class="panel span7"><h2>Disks · temperature & live I/O</h2><div id="disks"></div></section>
-      <section class="panel span5">
-        <h2>Other sensors</h2>
-        <div class="combined-sensors"><div id="other"></div><div id="devices"></div></div>
+      <section class="panel span12">
+        <div class="panel-title-row"><h2>All temperatures</h2><span class="mini-note">Every exposed CPU, motherboard, storage and other hwmon temperature</span></div>
+        <div class="temps-wrap" id="all-temps"></div>
+      </section>
+
+      <section class="panel span12">
+        <div class="bottom-grid">
+          <div class="subpanel">
+            <div class="panel-title-row"><h2>Fans</h2><div class="header-badges" id="headers"></div></div>
+            <div id="fans"></div>
+          </div>
+          <div class="subpanel">
+            <div class="panel-title-row"><h2>Disks · live I/O</h2><span class="mini-note">physical devices</span></div>
+            <div id="disks"></div>
+          </div>
+        </div>
       </section>
     </div>
 
-    <aside class="panel process-panel">
-      <div class="process-head">
-        <h2>Top processes · live</h2>
-        <span class="badge" id="process-rate">1 s refresh</span>
-      </div>
-      <div class="process-scroll" id="processes"></div>
+    <aside class="right">
+      <section class="panel rank-panel">
+        <div class="rank-head"><h2>Top 5 CPU processes</h2><span class="badge" id="refresh1">1 s</span></div>
+        <div class="rank-body" id="top-cpu"></div>
+      </section>
+      <section class="panel rank-panel">
+        <div class="rank-head"><div><h2>Top 5 network</h2><div class="net-note">container / network-namespace totals; process shown for context</div></div><span class="badge" id="refresh2">1 s</span></div>
+        <div class="rank-body" id="top-network"></div>
+      </section>
+      <section class="panel rank-panel">
+        <div class="rank-head"><h2>Top 5 disk processes</h2><span class="badge" id="refresh3">1 s</span></div>
+        <div class="rank-body" id="top-disk"></div>
+      </section>
     </aside>
   </div>
-  <div class="footer">Read-only host telemetry. PWM values are displayed but never written. Process I/O may show “—” when Linux denies that per-process counter to the unprivileged monitor.</div>
 </main>
 <script>
-let history = {};
+let history={};
 function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
 function bytes(v){v=Number(v||0);const u=['B','KB','MB','GB','TB'];let i=0;while(v>=1000&&i<u.length-1){v/=1000;i++;}return `${v.toFixed(i<2?0:1)} ${u[i]}`;}
 function pct(v){return v==null?'—':`${Number(v).toFixed(1)}%`;}
 function temp(v){return v==null?'—':`${Number(v).toFixed(1)} °C`;}
 function rate(v){return v==null?'—':`${Number(v).toFixed(v>=10?1:2)} MB/s`;}
-function sparkline(id, cls=''){
-  const pts=(history[id]||[]).slice(-180); if(pts.length<2)return '';
-  const vals=pts.map(p=>p[1]), min=Math.min(...vals), max=Math.max(...vals), span=(max-min)||1;
-  const xy=vals.map((v,i)=>`${(i/(vals.length-1))*100},${44-((v-min)/span)*38}`).join(' ');
-  return `<svg class="spark ${cls}" viewBox="0 0 100 48" preserveAspectRatio="none"><polyline points="${xy}"/></svg>`;
-}
-function usageBar(v, cls=''){ if(v==null)return ''; const p=Math.max(0,Math.min(100,Number(v))); return `<span class="bar ${cls}"><span style="width:${p}%"></span></span>`; }
-function tempBlock(group){
-  const arr=group.temperatures||[];
-  if(!arr.length)return '<div class="empty">No sensors exposed</div>';
-  return `<div class="metric-big">${temp(group.hottest_c).replace(' °C','')}<small> °C hottest</small></div>`+
-    `<div class="sensor-list">${arr.map(s=>`<div class="sensor"><div class="label">${esc(s.label)}</div><div class="value">${temp(s.celsius)}</div></div>`).join('')}</div>`;
-}
-function renderCPU(s){
-  const u=s.cpu.usage_percent;
-  const load=s.cpu.load||{};
-  const temps=s.cpu.temperatures||[];
-  return `<div class="metric-big">${u==null?'—':Number(u).toFixed(1)}<small> %</small></div>`+
-    `${usageBar(u)}${sparkline('system:cpu_percent')}`+
-    `<div class="metric-row"><span>Hottest <strong>${temp(s.cpu.hottest_c)}</strong></span><span>Load <strong>${load.load1==null?'—':Number(load.load1).toFixed(2)}</strong></span></div>`+
-    `<div class="sensor-list">${temps.slice(0,6).map(t=>`<div class="sensor"><div class="label">${esc(t.label)}</div><div class="value">${temp(t.celsius)}</div></div>`).join('')}</div>`;
-}
-function renderMemory(m){
-  if(!m||!m.total_bytes)return '<div class="empty">Host memory data unavailable</div>';
-  return `<div class="metric-big">${pct(m.used_percent).replace('%','')}<small> % used</small></div>`+
-    `${usageBar(m.used_percent,'purple')}${sparkline('system:memory_percent','purple')}`+
-    `<div class="metric-row"><span>Used <strong>${bytes(m.used_bytes)}</strong></span><span>Available <strong>${bytes(m.available_bytes)}</strong></span><span>Total <strong>${bytes(m.total_bytes)}</strong></span></div>`;
-}
-function renderGPU(g){
-  if(!g||!g.available){return `<div class="empty">NVIDIA telemetry unavailable${g?.error?`: ${esc(g.error)}`:''}</div>`;}
-  return `<div class="gpu-grid">${(g.gpus||[]).map(x=>`<div class="gpu-device">
-    <div class="gpu-name">GPU ${x.index} · ${esc(x.name)}</div>
-    <div class="gpu-stats">
-      <div class="gpu-stat"><small>GPU usage</small><strong>${x.util_percent}%</strong>${usageBar(x.util_percent)}</div>
-      <div class="gpu-stat"><small>VRAM</small><strong>${pct(x.vram_percent)}</strong><div class="sub">${bytes(x.vram_used_bytes)} / ${bytes(x.vram_total_bytes)}</div></div>
-      <div class="gpu-stat"><small>Temperature</small><strong>${temp(x.temperature_c)}</strong><div class="sub">${x.fan_percent==null?'Fan —':`Fan ${x.fan_percent}%`}</div></div>
-      <div class="gpu-stat"><small>Power</small><strong>${x.power_w==null?'—':`${Number(x.power_w).toFixed(1)} W`}</strong></div>
-      <div class="gpu-stat"><small>Memory engine</small><strong>${x.memory_util_percent}%</strong></div>
-      <div class="gpu-stat"><small>P-state</small><strong>${x.pstate==null?'—':`P${x.pstate}`}</strong></div>
-    </div>
-    ${sparkline(`gpu:${x.index}:util`,'cyan')}
-  </div>`).join('')}</div>`;
-}
-function renderHeaders(headers, fans){
-  if(!headers.length)return '<span class="mini-note">No header inventory</span>';
-  return `<span class="mini-note">${headers.length} physical / ${fans.length} exposed</span>`+
-    headers.map(h=>`<span class="badge">${esc(h)}</span>`).join('');
-}
-function renderFans(fans){
-  if(!fans.length)return '<div class="empty">No fan sensors exposed</div>';
-  return `<table><thead><tr><th>Header / label</th><th>Kernel</th><th class="num">RPM</th><th>PWM</th><th>Status</th></tr></thead><tbody>`+
-    fans.map(f=>{let p=f.pwm_percent;return `<tr><td>${esc(f.label)}</td><td><span class="badge">${esc(f.kernel_name)}</span></td><td class="num">${f.rpm==null?'—':f.rpm}</td><td>${p==null?'—':`${usageBar(p)} &nbsp;${p}%`}</td><td class="${esc(f.state)}">${esc(f.state.replaceAll('-',' '))}</td></tr>`}).join('')+
-    `</tbody></table>`;
-}
-function renderDisks(disks){
-  if(!disks.length)return '<div class="empty">No physical disks discovered through host /sys and /proc.</div>';
-  return `<table><thead><tr><th>Disk</th><th class="num">Temp</th><th class="num">Read</th><th class="num">Write</th></tr></thead><tbody>`+
-    disks.map(d=>`<tr><td><strong>${esc(d.name)}</strong><span class="disk-model">${esc(d.model)}</span></td><td class="num ${d.temperature_c>=50?'warn':''}">${temp(d.temperature_c)}</td><td class="num io-read">${rate(d.read_mbps)}</td><td class="num io-write">${rate(d.write_mbps)}</td></tr>`).join('')+
-    `</tbody></table>`;
-}
-function renderOther(arr){
-  if(!arr.length)return '<div class="empty">No additional temperature sensors exposed</div>';
-  return `<table><thead><tr><th>Device</th><th>Sensor</th><th class="num">Temperature</th></tr></thead><tbody>${arr.map(s=>`<tr><td>${esc(s.block_device||s.chip)}</td><td>${esc(s.label)}</td><td class="num">${temp(s.celsius)}</td></tr>`).join('')}</tbody></table>`;
-}
-function renderDevices(arr){
-  if(!arr.length)return '<div class="empty">No hwmon devices found</div>';
-  return `<div class="sensor-list">${arr.map(d=>`<div class="sensor"><div class="label">${esc(d.name)}</div><div class="value">${d.temperatures}T / ${d.fans}F</div></div>`).join('')}</div>`;
-}
-function renderProcesses(arr){
-  if(!arr||!arr.length)return '<div class="empty" style="padding:14px">Waiting for a second sample…</div>';
-  return `<table><thead><tr><th>Process</th><th class="num">CPU</th><th class="num">RAM</th><th class="num">GPU</th><th class="num">R/W</th></tr></thead><tbody>`+
-    arr.map(p=>{const io=(p.read_mbps==null&&p.write_mbps==null)?'—':`${Number(p.read_mbps||0).toFixed(1)}/${Number(p.write_mbps||0).toFixed(1)}`; return `<tr>
-      <td class="proc-name"><div class="proc-title">${esc(p.name)} <span class="muted">#${p.pid}</span></div><div class="proc-cmd" title="${esc(p.command)}">${esc(p.command)}</div></td>
-      <td class="num ${p.cpu_percent>=50?'hot':''}">${Number(p.cpu_percent).toFixed(1)}%</td>
-      <td class="num">${bytes(p.rss_bytes)}</td>
-      <td class="num">${p.gpu_vram_bytes?bytes(p.gpu_vram_bytes):'—'}</td>
-      <td class="num"><span class="io-read">${io}</span></td>
-    </tr>`}).join('')+`</tbody></table>`;
-}
-async function refreshHistory(){ try{ const r=await fetch('/api/history',{cache:'no-store'}); const j=await r.json(); history=j.series||{}; }catch(e){} }
-async function refresh(){
-  try{
-    const r=await fetch('/api/status',{cache:'no-store'}), s=await r.json();
-    if(s.error) throw new Error(s.error);
-    document.getElementById('subtitle').textContent=`${s.system_name} · ${s.motherboard_name}`;
-    document.getElementById('updated').textContent=`Updated ${new Date(s.timestamp*1000).toLocaleTimeString()}`;
-    document.getElementById('process-rate').textContent=`${Number(s.poll_interval||1).toFixed(1)} s refresh`;
-    document.getElementById('cpu').innerHTML=renderCPU(s);
-    document.getElementById('memory').innerHTML=renderMemory(s.memory);
-    document.getElementById('gpu').innerHTML=renderGPU(s.gpu);
-    document.getElementById('board').innerHTML=tempBlock(s.motherboard);
-    document.getElementById('headers').innerHTML=renderHeaders(s.physical_headers||[],s.fans||[]);
-    document.getElementById('fans').innerHTML=renderFans(s.fans||[]);
-    document.getElementById('disks').innerHTML=renderDisks(s.disks||[]);
-    document.getElementById('other').innerHTML=renderOther(s.other_temperatures||[]);
-    document.getElementById('devices').innerHTML=renderDevices(s.devices||[]);
-    const processRows = window.innerHeight < 850 ? 11 : (window.innerHeight < 1000 ? 14 : 17);
-    document.getElementById('processes').innerHTML=renderProcesses((s.processes||[]).slice(0,processRows));
-  } catch(e){ document.getElementById('subtitle').textContent='Unable to read host telemetry'; document.getElementById('cpu-panel').classList.add('error'); document.getElementById('cpu').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
-}
-refreshHistory().then(refresh);
-setInterval(refresh,1000);
-setInterval(refreshHistory,5000);
+function usageBar(v,cls=''){if(v==null)return '';const p=Math.max(0,Math.min(100,Number(v)));return `<span class="bar ${cls}"><span style="width:${p}%"></span></span>`;}
+function sparkline(id,cls=''){const pts=(history[id]||[]).slice(-180);if(pts.length<2)return '';const vals=pts.map(p=>p[1]),min=Math.min(...vals),max=Math.max(...vals),span=(max-min)||1;const xy=vals.map((v,i)=>`${(i/(vals.length-1))*100},${42-((v-min)/span)*36}`).join(' ');return `<svg class="spark ${cls}" viewBox="0 0 100 44" preserveAspectRatio="none"><polyline points="${xy}"/></svg>`;}
+function containerLabel(p){const app=p.app_name||'host',svc=p.service_name||'';return svc&&svc!==app?`${app} › ${svc}`:app;}
+function renderCPU(s){const u=s.cpu.usage_percent,load=s.cpu.load||{};return `<div class="metric-big">${u==null?'—':Number(u).toFixed(1)}<small> %</small></div>${usageBar(u)}${sparkline('system:cpu_percent')}<div class="metric-row"><span>Hottest <strong>${temp(s.cpu.hottest_c)}</strong></span><span>Load <strong>${load.load1==null?'—':Number(load.load1).toFixed(2)}</strong></span><span>${(s.cpu.temperatures||[]).length} sensors</span></div>`;}
+function renderMemory(m){if(!m||!m.total_bytes)return '<div class="empty">Unavailable</div>';return `<div class="metric-big">${Number(m.used_percent).toFixed(1)}<small> % used</small></div>${usageBar(m.used_percent,'purple')}${sparkline('system:memory_percent','purple')}<div class="metric-row"><span>Used <strong>${bytes(m.used_bytes)}</strong></span><span>Avail <strong>${bytes(m.available_bytes)}</strong></span><span>Total <strong>${bytes(m.total_bytes)}</strong></span></div>`;}
+function renderGPU(g){if(!g||!g.available)return `<div class="empty">NVIDIA unavailable${g?.error?`: ${esc(g.error)}`:''}</div>`;return (g.gpus||[]).map(x=>`<div class="gpu-name">GPU ${x.index} · ${esc(x.name)}</div><div class="gpu-stats"><div class="gpu-stat"><small>GPU</small><strong>${x.util_percent}%</strong>${usageBar(x.util_percent,'cyan')}</div><div class="gpu-stat"><small>VRAM</small><strong>${pct(x.vram_percent)}</strong><div class="sub">${bytes(x.vram_used_bytes)} / ${bytes(x.vram_total_bytes)}</div></div><div class="gpu-stat"><small>Temp</small><strong>${temp(x.temperature_c)}</strong><div class="sub">Fan ${x.fan_percent??'—'}%</div></div><div class="gpu-stat"><small>Power</small><strong>${x.power_w==null?'—':`${Number(x.power_w).toFixed(1)} W`}</strong></div><div class="gpu-stat"><small>Mem eng.</small><strong>${x.memory_util_percent}%</strong></div><div class="gpu-stat"><small>P-state</small><strong>${x.pstate==null?'—':`P${x.pstate}`}</strong></div></div>${sparkline(`gpu:${x.index}:util`,'cyan')}`).join('');}
+function tempRows(items){if(!items.length)return '<div class="empty">None</div>';return `<div class="temp-list">${items.map(x=>`<div class="temp-row"><div class="temp-label" title="${esc(x.label)}">${esc(x.label)}</div><div class="temp-value ${Number(x.celsius)>=70?'warn':''}">${temp(x.celsius)}</div></div>`).join('')}</div>`;}
+function renderAllTemps(s){const cpu=(s.cpu.temperatures||[]).map(x=>({...x,label:x.label}));const board=(s.motherboard.temperatures||[]);const storage=(s.disks||[]).filter(d=>d.temperature_c!=null).map(d=>({label:`${d.name} · ${d.model||''}`,celsius:d.temperature_c}));const diskNames=new Set((s.disks||[]).map(d=>d.name));const other=(s.other_temperatures||[]).filter(x=>!(x.block_device&&diskNames.has(x.block_device))).map(x=>({...x,label:`${x.chip} · ${x.label}`}));return `<div class="temp-group"><div class="temp-head"><span>CPU</span><span>${cpu.length}</span></div>${tempRows(cpu)}</div><div class="temp-group"><div class="temp-head"><span>Motherboard</span><span>${board.length}</span></div>${tempRows(board)}</div><div class="temp-group"><div class="temp-head"><span>Storage</span><span>${storage.length}</span></div>${tempRows(storage)}</div><div class="temp-group"><div class="temp-head"><span>Other</span><span>${other.length}</span></div>${tempRows(other)}</div>`;}
+function renderHeaders(headers,fans){return `<span class="mini-note">${headers.length} physical / ${fans.length} exposed</span>${headers.map(h=>`<span class="badge">${esc(h)}</span>`).join('')}`;}
+function renderFans(fans){if(!fans.length)return '<div class="empty">No fan sensors</div>';return `<table><thead><tr><th style="width:31%">Header / label</th><th style="width:11%">Kernel</th><th class="num" style="width:13%">RPM</th><th style="width:25%">PWM</th><th>Status</th></tr></thead><tbody>${fans.map(f=>`<tr><td>${esc(f.label)}</td><td><span class="badge">${esc(f.kernel_name)}</span></td><td class="num">${f.rpm??'—'}</td><td>${f.pwm_percent==null?'—':`${usageBar(f.pwm_percent)} ${f.pwm_percent}%`}</td><td class="${esc(f.state)}">${esc(f.state.replaceAll('-',' '))}</td></tr>`).join('')}</tbody></table>`;}
+function renderDisks(disks){if(!disks.length)return '<div class="empty">No physical disks</div>';return `<table><thead><tr><th>Disk</th><th class="num">Temp</th><th class="num">Read</th><th class="num">Write</th></tr></thead><tbody>${disks.map(d=>`<tr><td><strong>${esc(d.name)}</strong><span class="disk-model">${esc(d.model)}</span></td><td class="num ${Number(d.temperature_c)>=50?'warn':''}">${temp(d.temperature_c)}</td><td class="num io-read">${rate(d.read_mbps)}</td><td class="num io-write">${rate(d.write_mbps)}</td></tr>`).join('')}</tbody></table>`;}
+function ramCell(value,max){const width=max>0?Math.max(0,Math.min(100,value/max*100)):0;return `<div class="ram-wrap" title="Linear scale within this Top-5 list"><div class="ram-fill" style="width:${width}%"></div><div class="ram-text">${bytes(value)}</div></div>`;}
+function renderTopCPU(arr){if(!arr?.length)return '<div class="empty">Waiting for sample…</div>';const maxRam=Math.max(...arr.map(x=>Number(x.rss_bytes||0)),1);return `<table class="rank-table"><thead><tr><th style="width:50%">Container · process</th><th class="num" style="width:16%">CPU</th><th style="width:25%">RAM</th><th class="num">GPU</th></tr></thead><tbody>${arr.map(p=>`<tr><td><div class="rank-main"><span class="container-tag">${esc(containerLabel(p))}</span> · ${esc(p.name)}</div><div class="rank-sub" title="${esc(p.container_name)} · ${esc(p.command)}">${esc(p.container_name)} · PID ${p.pid}</div></td><td class="num resource ${p.cpu_percent>=50?'hot':''}">${Number(p.cpu_percent).toFixed(1)}%</td><td>${ramCell(p.rss_bytes,maxRam)}</td><td class="num">${p.gpu_vram_bytes?bytes(p.gpu_vram_bytes):'—'}</td></tr>`).join('')}</tbody></table>`;}
+function renderTopDisk(arr){if(!arr?.length)return '<div class="empty">Waiting for readable /proc process I/O…</div>';const maxRam=Math.max(...arr.map(x=>Number(x.rss_bytes||0)),1);return `<table class="rank-table"><thead><tr><th style="width:47%">Container · process</th><th class="num" style="width:23%">R / W</th><th style="width:30%">RAM</th></tr></thead><tbody>${arr.map(p=>`<tr><td><div class="rank-main"><span class="container-tag">${esc(containerLabel(p))}</span> · ${esc(p.name)}</div><div class="rank-sub">${esc(p.container_name)} · PID ${p.pid}</div></td><td class="num resource"><span class="io-read">${Number(p.read_mbps||0).toFixed(2)}</span> / <span class="io-write">${Number(p.write_mbps||0).toFixed(2)}</span></td><td>${ramCell(p.rss_bytes,maxRam)}</td></tr>`).join('')}</tbody></table>`;}
+function renderTopNetwork(arr){if(!arr?.length)return '<div class="empty">Waiting for a second network-namespace sample…</div>';const maxRam=Math.max(...arr.map(x=>Number(x.rss_bytes||0)),1);return `<table class="rank-table"><thead><tr><th style="width:48%">Container / process context</th><th class="num" style="width:24%">RX / TX</th><th style="width:28%">RAM</th></tr></thead><tbody>${arr.map(n=>{const p=n.processes?.[0];return `<tr><td><div class="rank-main"><span class="container-tag">${esc(n.app_name||n.container_name)}</span>${p?` · ${esc(p.name)}`:''}</div><div class="rank-sub" title="${esc(n.container_name)}">${esc(n.container_name)} · ${n.process_count} proc${n.process_count===1?'':'s'}</div></td><td class="num resource"><span class="io-read">${Number(n.rx_mbps||0).toFixed(2)}</span> / <span class="io-write">${Number(n.tx_mbps||0).toFixed(2)}</span></td><td>${ramCell(n.rss_bytes,maxRam)}</td></tr>`}).join('')}</tbody></table>`;}
+async function refreshHistory(){try{const r=await fetch('/api/history',{cache:'no-store'});const j=await r.json();history=j.series||{}}catch(e){}}
+async function refresh(){try{const r=await fetch('/api/status',{cache:'no-store'}),s=await r.json();if(s.error)throw new Error(s.error);document.getElementById('subtitle').textContent=`${s.system_name} · ${s.motherboard_name}`;document.getElementById('updated').textContent=`Updated ${new Date(s.timestamp*1000).toLocaleTimeString()} · ${Number(s.poll_interval||1).toFixed(1)} s`;document.getElementById('cpu').innerHTML=renderCPU(s);document.getElementById('memory').innerHTML=renderMemory(s.memory);document.getElementById('gpu').innerHTML=renderGPU(s.gpu);document.getElementById('all-temps').innerHTML=renderAllTemps(s);document.getElementById('headers').innerHTML=renderHeaders(s.physical_headers||[],s.fans||[]);document.getElementById('fans').innerHTML=renderFans(s.fans||[]);document.getElementById('disks').innerHTML=renderDisks(s.disks||[]);document.getElementById('top-cpu').innerHTML=renderTopCPU(s.top_cpu||[]);document.getElementById('top-network').innerHTML=renderTopNetwork(s.top_network||[]);document.getElementById('top-disk').innerHTML=renderTopDisk(s.top_disk||[]);}catch(e){document.getElementById('subtitle').textContent=`Telemetry error: ${e.message}`}}
+refreshHistory().then(refresh);setInterval(refresh,1000);setInterval(refreshHistory,5000);
 </script>
 </body>
 </html>

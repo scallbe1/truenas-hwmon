@@ -2,6 +2,7 @@ services:
   truenas-hwmon:
     image: ghcr.io/scallbe1/truenas-hwmon:latest
     restart: unless-stopped
+    user: "0:0"
 
     deploy:
       resources:
@@ -18,16 +19,18 @@ services:
     environment:
       HOST_SYS: /host/sys
       HOST_PROC: /host/proc
+      DOCKER_CONTAINERS_ROOT: /host/docker/containers
       CONFIG_PATH: /config/config.json
       POLL_INTERVAL: "1"
       HISTORY_MINUTES: "60"
-      PROCESS_LIMIT: "18"
+      PROCESS_LIMIT: "20"
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: utility
 
     volumes:
       - /sys:/host/sys:ro
       - /proc:/host/proc:ro
+      - /mnt/.ix-apps/docker/containers:/host/docker/containers:ro
       - /mnt/pool1/truenas-hwmon/config:/config:ro
 
     read_only: true
@@ -40,3 +43,6 @@ services:
 
     cap_drop:
       - ALL
+
+    cap_add:
+      - SYS_PTRACE

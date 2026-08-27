@@ -23,6 +23,7 @@ APP_NAME = "TrueNAS Hardware Monitor"
 SYS_ROOT = Path(os.getenv("HOST_SYS", "/host/sys"))
 PROC_ROOT = Path(os.getenv("HOST_PROC", "/host/proc"))
 CONFIG_PATH = Path(os.getenv("CONFIG_PATH", "/config/config.json"))
+DOCKER_CONTAINERS_ROOT = Path(os.getenv("DOCKER_CONTAINERS_ROOT", "/host/docker/containers"))
 POLL_INTERVAL = max(0.5, float(os.getenv("POLL_INTERVAL", "1")))
 HISTORY_MINUTES = max(1, int(os.getenv("HISTORY_MINUTES", "60")))
 PROCESS_LIMIT = max(5, min(50, int(os.getenv("PROCESS_LIMIT", "18"))))
@@ -294,6 +295,103 @@ def read_diskstats_raw() -> dict[str, tuple[int, int]]:
     return result
 
 
+def extract_container_id(cgroup_text: str) -> str | None:
+    """Extract a Docker-style container ID from a process cgroup path."""
+    matches = re.findall(r"(?<![0-9a-f])([0-9a-f]{64})(?![0-9a-f])", cgroup_text.lower())
+    return matches[-1] if matches else None
+
+
+def read_netns_id(pid_path: Path) -> str | None:
+    try:
+        target = os.readlink(pid_path / "ns" / "net")
+    except OSError:
+        return None
+    m = re.match(r"net:\[(\d+)\]", target)
+    return m.group(1) if m else target
+
+
+def read_netdev_bytes(pid_path: Path) -> tuple[int, int] | None:
+    """Read aggregate RX/TX byte counters for a process network namespace."""
+    raw = read_text(pid_path / "net" / "dev")
+    if not raw:
+        return None
+    rx = tx = 0
+    for line in raw.splitlines():
+        if ":" not in line:
+            continue
+        iface, payload = line.split(":", 1)
+        iface = iface.strip()
+        if iface == "lo":
+            continue
+        parts = payload.split()
+        if len(parts) < 9:
+            continue
+        try:
+            rx += int(parts[0])
+            tx += int(parts[8])
+        except ValueError:
+            continue
+    return rx, tx
+
+
+class ContainerResolver:
+    """Resolve Docker container IDs to human-friendly names using read-only metadata."""
+
+    def __init__(self) -> None:
+        self._last_refresh = 0.0
+        self._items: dict[str, dict[str, str]] = {}
+        self._lock = threading.Lock()
+
+    def _refresh(self) -> None:
+        now = time.monotonic()
+        if now - self._last_refresh < 15:
+            return
+        items: dict[str, dict[str, str]] = {}
+        try:
+            dirs = list(DOCKER_CONTAINERS_ROOT.iterdir())
+        except OSError:
+            dirs = []
+        for d in dirs:
+            if not d.is_dir():
+                continue
+            cid = d.name.lower()
+            try:
+                data = json.loads((d / "config.v2.json").read_text())
+            except (OSError, json.JSONDecodeError):
+                continue
+            labels = ((data.get("Config") or {}).get("Labels") or {}) if isinstance(data, dict) else {}
+            raw_name = str(data.get("Name") or "").lstrip("/")
+            project = str(labels.get("com.docker.compose.project") or "")
+            service = str(labels.get("com.docker.compose.service") or "")
+            app_name = project[3:] if project.startswith("ix-") else project
+            items[cid] = {
+                "container_name": raw_name or cid[:12],
+                "app_name": app_name or raw_name or cid[:12],
+                "service_name": service,
+                "image": str((data.get("Config") or {}).get("Image") or ""),
+            }
+        with self._lock:
+            self._items = items
+            self._last_refresh = now
+
+    def resolve(self, container_id: str | None) -> dict[str, str]:
+        if not container_id:
+            return {"container_name": "host", "app_name": "host", "service_name": "", "image": ""}
+        self._refresh()
+        with self._lock:
+            item = self._items.get(container_id)
+            if item:
+                return dict(item)
+            # Be tolerant of runtimes exposing shortened IDs in cgroup paths.
+            for cid, candidate in self._items.items():
+                if cid.startswith(container_id) or container_id.startswith(cid):
+                    return dict(candidate)
+        return {"container_name": container_id[:12], "app_name": container_id[:12], "service_name": "", "image": ""}
+
+
+container_resolver = ContainerResolver()
+
+
 def read_process_raw() -> dict[int, dict[str, Any]]:
     out: dict[int, dict[str, Any]] = {}
     try:
@@ -344,6 +442,9 @@ def read_process_raw() -> dict[int, dict[str, Any]]:
                         write_bytes = int(line.split(":", 1)[1].strip())
                     except ValueError:
                         pass
+        cgroup_text = read_text(p / "cgroup") or ""
+        container_id = extract_container_id(cgroup_text)
+        netns_id = read_netns_id(p)
         out[pid] = {
             "pid": pid,
             "comm": comm,
@@ -352,6 +453,8 @@ def read_process_raw() -> dict[int, dict[str, Any]]:
             "rss_bytes": rss_bytes,
             "read_bytes": read_bytes,
             "write_bytes": write_bytes,
+            "container_id": container_id,
+            "netns_id": netns_id,
         }
     return out
 
@@ -449,6 +552,7 @@ class RuntimeSampler:
         self.prev_cpu: tuple[int, int] | None = None
         self.prev_disks: dict[str, tuple[int, int]] = {}
         self.prev_processes: dict[int, dict[str, Any]] = {}
+        self.prev_network: dict[str, tuple[int, int]] = {}
         try:
             self.clk_tck = int(os.sysconf("SC_CLK_TCK"))
         except (ValueError, OSError):
@@ -485,7 +589,22 @@ class RuntimeSampler:
             )
 
         current_processes = read_process_raw()
+
+        # Sample each unique network namespace once. Linux exposes namespace totals,
+        # not honest per-process byte counters, so network ranking is container/netns scoped.
+        net_representatives: dict[str, int] = {}
+        for pid, cur in current_processes.items():
+            ns = cur.get("netns_id")
+            if ns and ns not in net_representatives:
+                net_representatives[ns] = pid
+        current_network: dict[str, tuple[int, int]] = {}
+        for ns, pid in net_representatives.items():
+            counters = read_netdev_bytes(PROC_ROOT / str(pid))
+            if counters is not None:
+                current_network[ns] = counters
+
         processes: list[dict[str, Any]] = []
+        processes_by_ns: dict[str, list[dict[str, Any]]] = {}
         for pid, cur in current_processes.items():
             prev = self.prev_processes.get(pid)
             proc_cpu = 0.0
@@ -500,35 +619,78 @@ class RuntimeSampler:
                     write_mbps = max(0.0, (cur["write_bytes"] - prev["write_bytes"]) / dt / 1_000_000)
             mem_pct = cur["rss_bytes"] * 100 / total_memory if total_memory else 0.0
             gpu_vram = gpu_process_vram.get(pid, 0)
-            io_rate = (read_mbps or 0.0) + (write_mbps or 0.0)
-            # Surface CPU-heavy, RAM-heavy, I/O-heavy and GPU-memory-heavy processes together.
-            activity = proc_cpu + min(100.0, mem_pct * 4.0) + min(100.0, io_rate * 2.0) + (50.0 if gpu_vram else 0.0)
-            processes.append(
-                {
-                    "pid": pid,
-                    "name": cur["comm"],
-                    "command": cur["command"],
-                    "cpu_percent": round(proc_cpu, 1),
-                    "rss_bytes": cur["rss_bytes"],
-                    "memory_percent": round(mem_pct, 1),
-                    "read_mbps": round(read_mbps, 2) if read_mbps is not None else None,
-                    "write_mbps": round(write_mbps, 2) if write_mbps is not None else None,
-                    "gpu_vram_bytes": gpu_vram,
-                    "activity_score": round(activity, 2),
-                }
-            )
-        processes.sort(key=lambda x: (x["activity_score"], x["cpu_percent"], x["rss_bytes"]), reverse=True)
+            container = container_resolver.resolve(cur.get("container_id"))
+            item = {
+                "pid": pid,
+                "name": cur["comm"],
+                "command": cur["command"],
+                "cpu_percent": round(proc_cpu, 1),
+                "rss_bytes": cur["rss_bytes"],
+                "memory_percent": round(mem_pct, 2),
+                "read_mbps": round(read_mbps, 2) if read_mbps is not None else None,
+                "write_mbps": round(write_mbps, 2) if write_mbps is not None else None,
+                "disk_mbps": round((read_mbps or 0.0) + (write_mbps or 0.0), 2),
+                "gpu_vram_bytes": gpu_vram,
+                "container_id": cur.get("container_id"),
+                "container_name": container["container_name"],
+                "app_name": container["app_name"],
+                "service_name": container["service_name"],
+                "netns_id": cur.get("netns_id"),
+            }
+            processes.append(item)
+            if cur.get("netns_id"):
+                processes_by_ns.setdefault(str(cur["netns_id"]), []).append(item)
+
+        top_cpu = sorted(processes, key=lambda x: (x["cpu_percent"], x["rss_bytes"]), reverse=True)[:5]
+        top_disk = sorted(processes, key=lambda x: (x["disk_mbps"], x["cpu_percent"]), reverse=True)[:5]
+
+        network_groups: list[dict[str, Any]] = []
+        if dt is not None:
+            for ns, cur_counter in current_network.items():
+                prev_counter = self.prev_network.get(ns)
+                if not prev_counter:
+                    continue
+                rx_mbps = max(0.0, (cur_counter[0] - prev_counter[0]) / dt / 1_000_000)
+                tx_mbps = max(0.0, (cur_counter[1] - prev_counter[1]) / dt / 1_000_000)
+                members = processes_by_ns.get(ns, [])
+                if not members:
+                    continue
+                members_sorted = sorted(members, key=lambda x: (x["cpu_percent"], x["rss_bytes"]), reverse=True)
+                primary = members_sorted[0]
+                network_groups.append({
+                    "netns_id": ns,
+                    "container_name": primary["container_name"],
+                    "app_name": primary["app_name"],
+                    "service_name": primary["service_name"],
+                    "rx_mbps": round(rx_mbps, 2),
+                    "tx_mbps": round(tx_mbps, 2),
+                    "total_mbps": round(rx_mbps + tx_mbps, 2),
+                    "rss_bytes": sum(int(x["rss_bytes"]) for x in members),
+                    "process_count": len(members),
+                    "processes": [
+                        {"pid": x["pid"], "name": x["name"], "command": x["command"], "cpu_percent": x["cpu_percent"]}
+                        for x in members_sorted[:3]
+                    ],
+                })
+        top_network = sorted(network_groups, key=lambda x: x["total_mbps"], reverse=True)[:5]
+
+        # Retain the old general list for API compatibility, but rank it sanely by CPU then RAM.
+        processes_sorted = sorted(processes, key=lambda x: (x["cpu_percent"], x["rss_bytes"]), reverse=True)
 
         self.prev_ts = now
         self.prev_cpu = current_cpu
         self.prev_disks = current_disks
         self.prev_processes = current_processes
+        self.prev_network = current_network
 
         return {
             "cpu_percent": cpu_percent,
             "load": read_loadavg(),
             "disks": disks,
-            "processes": processes[:PROCESS_LIMIT],
+            "processes": processes_sorted[:PROCESS_LIMIT],
+            "top_cpu": top_cpu,
+            "top_disk": top_disk,
+            "top_network": top_network,
         }
 
 
@@ -610,6 +772,9 @@ def read_all_sensors() -> dict[str, Any]:
         "fans": fans,
         "disks": runtime["disks"],
         "processes": runtime["processes"],
+        "top_cpu": runtime["top_cpu"],
+        "top_disk": runtime["top_disk"],
+        "top_network": runtime["top_network"],
         "other_temperatures": other_temps,
         "devices": devices,
         "physical_headers": cfg.get("physical_headers", []),
@@ -692,7 +857,7 @@ def startup() -> None:
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     html_path = Path(__file__).parent / "static" / "index.html"
-    return HTMLResponse(html_path.read_text())
+    return HTMLResponse(html_path.read_text(), headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
 
 
 @app.get("/api/status")
@@ -719,6 +884,7 @@ def health() -> dict[str, Any]:
         "ok": True,
         "sys_root": str(SYS_ROOT),
         "proc_root": str(PROC_ROOT),
+        "docker_containers_root": str(DOCKER_CONTAINERS_ROOT),
         "hwmon_devices": discover_hwmon(),
         "nvidia_available": gpu_ok,
     }

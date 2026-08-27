@@ -4,6 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOST_SYS=/host/sys \
     HOST_PROC=/host/proc \
+    DOCKER_CONTAINERS_ROOT=/host/docker/containers \
     CONFIG_PATH=/config/config.json \
     POLL_INTERVAL=1 \
     HISTORY_MINUTES=60 \
@@ -14,9 +15,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app /app
 
-RUN groupadd --gid 10001 hwmon \
-    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin hwmon
-USER 10001:10001
+# Runs as root only so it can read host /proc/<pid>/io and cgroup metadata.
+# Host mounts remain read-only and all capabilities are dropped except SYS_PTRACE at deployment.
 
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
