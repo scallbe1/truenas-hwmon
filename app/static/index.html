@@ -14,62 +14,74 @@
     * { box-sizing:border-box; }
     html,body { margin:0; min-height:100%; }
     body { font-family:Inter,Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
-    header { padding:20px 24px 10px; display:flex; justify-content:space-between; gap:20px; align-items:flex-end; max-width:1800px; margin:auto; }
-    h1 { margin:0; font-size:24px; letter-spacing:.2px; }
-    .sub { color:var(--muted); margin-top:5px; font-size:13px; }
-    #updated { color:var(--muted); font-size:12px; white-space:nowrap; }
-    main { padding:12px 24px 28px; max-width:1800px; margin:auto; }
-    .layout { display:grid; grid-template-columns:minmax(0,3.2fr) minmax(360px,1.15fr); gap:14px; align-items:start; }
-    .left { display:grid; grid-template-columns:repeat(12,1fr); gap:14px; min-width:0; }
-    .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:15px; min-width:0; }
-    .span3 { grid-column:span 3; } .span4 { grid-column:span 4; } .span6 { grid-column:span 6; } .span8 { grid-column:span 8; } .span12 { grid-column:span 12; }
-    .panel h2 { margin:0 0 12px; font-size:14px; font-weight:700; letter-spacing:.15px; }
-    .metric-big { font-size:34px; font-weight:750; line-height:1; font-variant-numeric:tabular-nums; }
-    .metric-big small { font-size:14px; color:var(--muted); font-weight:500; }
-    .metric-row { display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; color:var(--muted); font-size:12px; }
-    .metric-row strong { color:var(--text); font-weight:600; font-variant-numeric:tabular-nums; }
-    .sensor-list { margin-top:12px; display:grid; gap:7px; }
-    .sensor { display:grid; grid-template-columns:minmax(100px,1fr) auto; gap:10px; padding:6px 0; border-top:1px solid rgba(255,255,255,.04); }
-    .sensor .label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-    .sensor .value { font-variant-numeric:tabular-nums; }
-    table { width:100%; border-collapse:collapse; }
-    th,td { padding:8px 7px; text-align:left; border-bottom:1px solid rgba(255,255,255,.055); font-size:12px; vertical-align:middle; }
-    th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var(--panel); z-index:1; }
-    td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
-    .badge { padding:3px 7px; border-radius:999px; font-size:10px; background:var(--panel2); color:var(--muted); display:inline-block; }
+    header { height:48px; padding:8px 14px 5px; display:flex; justify-content:space-between; gap:12px; align-items:center; max-width:1920px; margin:auto; }
+    h1 { margin:0; font-size:18px; line-height:1.1; letter-spacing:.1px; }
+    .sub { color:var(--muted); margin-top:2px; font-size:10px; line-height:1.2; }
+    #updated { color:var(--muted); font-size:10px; white-space:nowrap; }
+    main { height:calc(100vh - 48px); padding:4px 10px 8px; max-width:1920px; margin:auto; overflow:hidden; }
+    .layout { height:100%; display:grid; grid-template-columns:minmax(0,3.35fr) minmax(335px,1fr); gap:8px; align-items:stretch; }
+    .left { height:100%; display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); grid-template-rows:minmax(0,.82fr) minmax(0,1.04fr) minmax(0,1.14fr); gap:8px; min-width:0; min-height:0; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:8px 9px; min-width:0; min-height:0; overflow:hidden; }
+    .span3 { grid-column:span 3; } .span4 { grid-column:span 4; } .span5 { grid-column:span 5; } .span6 { grid-column:span 6; } .span7 { grid-column:span 7; } .span8 { grid-column:span 8; } .span9 { grid-column:span 9; } .span12 { grid-column:span 12; }
+    .panel h2 { margin:0 0 5px; font-size:11px; line-height:1.1; font-weight:750; letter-spacing:.12px; }
+    .panel-title-row { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:4px; }
+    .panel-title-row h2 { margin:0; }
+    .metric-big { font-size:25px; font-weight:760; line-height:1; font-variant-numeric:tabular-nums; }
+    .metric-big small { font-size:10px; color:var(--muted); font-weight:500; }
+    .metric-row { display:flex; gap:8px; flex-wrap:wrap; margin-top:4px; color:var(--muted); font-size:9px; line-height:1.2; }
+    .metric-row strong { color:var(--text); font-weight:650; font-variant-numeric:tabular-nums; }
+    .sensor-list { margin-top:4px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 12px; }
+    .sensor { display:grid; grid-template-columns:minmax(70px,1fr) auto; gap:6px; padding:2px 0; border-top:1px solid rgba(255,255,255,.035); font-size:9px; line-height:1.25; }
+    .sensor .label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); }
+    .sensor .value { font-variant-numeric:tabular-nums; white-space:nowrap; }
+    table { width:100%; border-collapse:collapse; table-layout:fixed; }
+    th,td { padding:3px 4px; text-align:left; border-bottom:1px solid rgba(255,255,255,.045); font-size:9px; line-height:1.15; vertical-align:middle; }
+    th { color:var(--muted); font-weight:650; background:var(--panel); }
+    td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .badge { padding:1px 4px; border-radius:999px; font-size:8px; line-height:1.25; background:var(--panel2); color:var(--muted); display:inline-block; white-space:nowrap; }
     .running,.good { color:var(--good); } .stopped,.stopped-or-unused,.muted { color:var(--muted); } .low,.warn { color:var(--warn); } .bad { color:var(--bad); }
-    .bar { width:92px; height:6px; border-radius:6px; background:#253547; overflow:hidden; display:inline-block; vertical-align:middle; }
+    .bar { width:58px; height:4px; border-radius:4px; background:#253547; overflow:hidden; display:inline-block; vertical-align:middle; }
     .bar > span { display:block; height:100%; background:var(--accent); }
     .bar.cyan > span { background:var(--cyan); } .bar.purple > span { background:var(--purple); }
-    .spark { width:100%; height:48px; margin-top:10px; display:block; }
-    .spark polyline { fill:none; stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; }
+    .spark { width:100%; height:22px; margin-top:3px; display:block; }
+    .spark polyline { fill:none; stroke:var(--accent); stroke-width:1.5; vector-effect:non-scaling-stroke; }
     .spark.cyan polyline { stroke:var(--cyan); } .spark.purple polyline { stroke:var(--purple); }
-    .empty { color:var(--muted); font-size:12px; padding:6px 0; }
+    .empty { color:var(--muted); font-size:9px; padding:3px 0; }
     .error { border-color:#6e2a2a; color:#ffaaaa; }
-    .footer { margin-top:14px; color:var(--muted); font-size:11px; }
-    .process-panel { position:sticky; top:12px; padding:0; overflow:hidden; }
-    .process-head { padding:15px 15px 10px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .footer { display:none; }
+    .process-panel { padding:0; height:100%; overflow:hidden; display:flex; flex-direction:column; }
+    .process-head { padding:7px 8px 5px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:6px; flex:0 0 auto; }
     .process-head h2 { margin:0; }
-    .process-scroll { max-height:calc(100vh - 125px); overflow:auto; }
-    .proc-name { max-width:190px; }
-    .proc-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
-    .proc-cmd { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:10px; margin-top:2px; }
+    .process-scroll { overflow:hidden; flex:1 1 auto; min-height:0; }
+    .process-scroll table { height:auto; }
+    .proc-name { width:48%; }
+    .proc-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:650; }
+    .proc-cmd { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:7px; margin-top:1px; }
     .hot { color:var(--warn); }
-    .gpu-grid { display:grid; gap:12px; }
-    .gpu-device { border-top:1px solid rgba(255,255,255,.05); padding-top:10px; }
-    .gpu-device:first-child { border-top:0; padding-top:0; }
-    .gpu-name { font-weight:650; margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .gpu-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-    .gpu-stat small { color:var(--muted); display:block; margin-bottom:3px; font-size:10px; text-transform:uppercase; letter-spacing:.4px; }
-    .gpu-stat strong { font-size:17px; font-variant-numeric:tabular-nums; }
-    .disk-model { color:var(--muted); font-size:10px; display:block; max-width:260px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    .gpu-grid { display:grid; gap:4px; }
+    .gpu-device { padding-top:2px; }
+    .gpu-name { font-weight:650; margin-bottom:4px; font-size:9px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .gpu-stats { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:5px; }
+    .gpu-stat small { color:var(--muted); display:block; margin-bottom:1px; font-size:7px; text-transform:uppercase; letter-spacing:.25px; white-space:nowrap; }
+    .gpu-stat strong { font-size:12px; line-height:1.05; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .disk-model { color:var(--muted); font-size:7px; display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
     .io-read { color:var(--cyan); } .io-write { color:var(--purple); }
-    @media(max-width:1250px){
-      .layout { grid-template-columns:1fr; }
-      .process-panel { position:static; }
-      .process-scroll { max-height:none; overflow:visible; }
+    .header-badges { display:flex; flex-wrap:nowrap; gap:3px; overflow:hidden; min-width:0; }
+    .mini-note { color:var(--muted); font-size:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .combined-sensors { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,.7fr); gap:8px; height:calc(100% - 16px); min-height:0; }
+    .combined-sensors > div { min-width:0; overflow:hidden; }
+    #fans table th:nth-child(1){width:30%} #fans table th:nth-child(2){width:13%} #fans table th:nth-child(3){width:12%} #fans table th:nth-child(4){width:27%} #fans table th:nth-child(5){width:18%}
+    #disks table th:nth-child(1){width:44%} #disks table th:nth-child(2){width:16%} #disks table th:nth-child(3){width:20%} #disks table th:nth-child(4){width:20%}
+    #processes th:nth-child(1){width:47%} #processes th:nth-child(2){width:12%} #processes th:nth-child(3){width:16%} #processes th:nth-child(4){width:13%} #processes th:nth-child(5){width:12%}
+    @media(max-width:1250px), (max-height:720px){
+      main { height:auto; overflow:visible; }
+      .layout { height:auto; grid-template-columns:1fr; }
+      .left { height:auto; grid-template-rows:none; }
+      .process-panel { height:auto; }
+      .process-scroll { overflow:visible; }
+      .footer { display:block; margin-top:8px; color:var(--muted); font-size:9px; }
     }
-    @media(max-width:900px){ .span3,.span4,.span6,.span8 { grid-column:span 12; } header{align-items:flex-start;flex-direction:column;} .gpu-stats{grid-template-columns:repeat(2,1fr);} }
+    @media(max-width:900px){ .span3,.span4,.span5,.span6,.span7,.span8,.span9 { grid-column:span 12; } header{height:auto;align-items:flex-start;flex-direction:column;} main{height:auto;} .gpu-stats{grid-template-columns:repeat(3,1fr);} .sensor-list{grid-template-columns:1fr;} .combined-sensors{grid-template-columns:1fr;} }
   </style>
 </head>
 <body>
@@ -84,13 +96,17 @@
       <section class="panel span3"><h2>Memory</h2><div id="memory"></div></section>
       <section class="panel span6"><h2>NVIDIA GPU</h2><div id="gpu"></div></section>
 
-      <section class="panel span6" id="board-panel"><h2>Motherboard</h2><div id="board"></div></section>
-      <section class="panel span6"><h2>Physical fan headers</h2><div id="headers"></div></section>
+      <section class="panel span3" id="board-panel"><h2>Motherboard</h2><div id="board"></div></section>
+      <section class="panel span9">
+        <div class="panel-title-row"><h2>Fans</h2><div class="header-badges" id="headers"></div></div>
+        <div id="fans"></div>
+      </section>
 
-      <section class="panel span12"><h2>Fans</h2><div id="fans"></div></section>
-      <section class="panel span12"><h2>Disks · temperature & live I/O</h2><div id="disks"></div></section>
-      <section class="panel span8"><h2>Other temperatures</h2><div id="other"></div></section>
-      <section class="panel span4"><h2>Sensor devices</h2><div id="devices"></div></section>
+      <section class="panel span7"><h2>Disks · temperature & live I/O</h2><div id="disks"></div></section>
+      <section class="panel span5">
+        <h2>Other sensors</h2>
+        <div class="combined-sensors"><div id="other"></div><div id="devices"></div></div>
+      </section>
     </div>
 
     <aside class="panel process-panel">
@@ -130,7 +146,7 @@ function renderCPU(s){
   return `<div class="metric-big">${u==null?'—':Number(u).toFixed(1)}<small> %</small></div>`+
     `${usageBar(u)}${sparkline('system:cpu_percent')}`+
     `<div class="metric-row"><span>Hottest <strong>${temp(s.cpu.hottest_c)}</strong></span><span>Load <strong>${load.load1==null?'—':Number(load.load1).toFixed(2)}</strong></span></div>`+
-    `<div class="sensor-list">${temps.slice(0,10).map(t=>`<div class="sensor"><div class="label">${esc(t.label)}</div><div class="value">${temp(t.celsius)}</div></div>`).join('')}</div>`;
+    `<div class="sensor-list">${temps.slice(0,6).map(t=>`<div class="sensor"><div class="label">${esc(t.label)}</div><div class="value">${temp(t.celsius)}</div></div>`).join('')}</div>`;
 }
 function renderMemory(m){
   if(!m||!m.total_bytes)return '<div class="empty">Host memory data unavailable</div>';
@@ -154,9 +170,9 @@ function renderGPU(g){
   </div>`).join('')}</div>`;
 }
 function renderHeaders(headers, fans){
-  if(!headers.length)return '<div class="empty">No physical-header inventory configured</div>';
-  return `<div class="sub" style="margin-bottom:10px">${headers.length} physical headers · Linux currently exposes ${fans.length} logical fan/PWM channels.</div>`+
-    `<div style="display:flex;flex-wrap:wrap;gap:7px">${headers.map(h=>`<span class="badge">${esc(h)}</span>`).join('')}</div>`;
+  if(!headers.length)return '<span class="mini-note">No header inventory</span>';
+  return `<span class="mini-note">${headers.length} physical / ${fans.length} exposed</span>`+
+    headers.map(h=>`<span class="badge">${esc(h)}</span>`).join('');
 }
 function renderFans(fans){
   if(!fans.length)return '<div class="empty">No fan sensors exposed</div>';
@@ -206,7 +222,8 @@ async function refresh(){
     document.getElementById('disks').innerHTML=renderDisks(s.disks||[]);
     document.getElementById('other').innerHTML=renderOther(s.other_temperatures||[]);
     document.getElementById('devices').innerHTML=renderDevices(s.devices||[]);
-    document.getElementById('processes').innerHTML=renderProcesses(s.processes||[]);
+    const processRows = window.innerHeight < 850 ? 11 : (window.innerHeight < 1000 ? 14 : 17);
+    document.getElementById('processes').innerHTML=renderProcesses((s.processes||[]).slice(0,processRows));
   } catch(e){ document.getElementById('subtitle').textContent='Unable to read host telemetry'; document.getElementById('cpu-panel').classList.add('error'); document.getElementById('cpu').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
 }
 refreshHistory().then(refresh);
