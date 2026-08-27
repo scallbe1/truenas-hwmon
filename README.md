@@ -1,4 +1,4 @@
-# TrueNAS Hardware Monitor v2.2
+# TrueNAS Hardware Monitor v2.3
 
 A compact, live hardware/resource dashboard for TrueNAS SCALE/Linux, designed around the ASRock Z590 Taichi / Nuvoton NCT6686D and NVIDIA GPUs.
 
@@ -25,7 +25,7 @@ The app never writes fan/PWM controls and NVML monitoring does not allocate mode
 
 ### Network accounting note
 
-Linux `/proc` exposes network byte counters per **network namespace**, not truthful per-process network byte totals. v2.2 therefore ranks network namespaces/containers and shows the busiest process(es) in that namespace for context. It does not falsely assign the entire container's traffic to one process. True per-process network attribution would require a privileged packet/eBPF collector.
+Linux `/proc` exposes network byte counters per **network namespace**, not truthful per-process network byte totals. v2.3 therefore ranks network namespaces/containers and shows the busiest process(es) in that namespace for context. It does not falsely assign the entire container's traffic to one process. True per-process network attribution would require a privileged packet/eBPF collector.
 
 ## Z590 Taichi sensor prerequisite
 
@@ -78,7 +78,7 @@ Open:
 http://TRUENAS-IP:30200
 ```
 
-The page is served with `Cache-Control: no-store` and displays **v2.2** beside the title so it is obvious when the new image is actually running.
+The page is served with `Cache-Control: no-store` and displays **v2.3** beside the title so it is obvious when the new image is actually running.
 
 ## Fan labels
 
@@ -112,3 +112,11 @@ PYTHONPATH=. python3 tests/test_mock.py
 ```
 
 The mock verifies NCT6686D sensors, disk temperature/I/O, memory, container-name resolution, per-process CPU/disk I/O and network-namespace throughput.
+
+
+## v2.3 dashboard changes
+
+- Adds a dedicated Top-5 memory-process panel with linear proportional RSS bars and host-memory percentage.
+- CPU, network and disk Top-5 panels no longer repeat memory bars.
+- Temperature groups use a denser two-column matrix so all exposed temperatures remain visible with larger default typography.
+- The right side is four equal live panels: CPU, Memory, Network and Disk I/O.

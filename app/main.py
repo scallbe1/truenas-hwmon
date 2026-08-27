@@ -642,6 +642,7 @@ class RuntimeSampler:
                 processes_by_ns.setdefault(str(cur["netns_id"]), []).append(item)
 
         top_cpu = sorted(processes, key=lambda x: (x["cpu_percent"], x["rss_bytes"]), reverse=True)[:5]
+        top_memory = sorted(processes, key=lambda x: (x["rss_bytes"], x["cpu_percent"]), reverse=True)[:5]
         top_disk = sorted(processes, key=lambda x: (x["disk_mbps"], x["cpu_percent"]), reverse=True)[:5]
 
         network_groups: list[dict[str, Any]] = []
@@ -689,6 +690,7 @@ class RuntimeSampler:
             "disks": disks,
             "processes": processes_sorted[:PROCESS_LIMIT],
             "top_cpu": top_cpu,
+            "top_memory": top_memory,
             "top_disk": top_disk,
             "top_network": top_network,
         }
@@ -773,6 +775,7 @@ def read_all_sensors() -> dict[str, Any]:
         "disks": runtime["disks"],
         "processes": runtime["processes"],
         "top_cpu": runtime["top_cpu"],
+        "top_memory": runtime["top_memory"],
         "top_disk": runtime["top_disk"],
         "top_network": runtime["top_network"],
         "other_temperatures": other_temps,

@@ -48,9 +48,11 @@ assert s2['top_cpu'][0]['pid'] == 4242
 assert s2['top_cpu'][0]['cpu_percent'] > 0
 assert s2['top_cpu'][0]['app_name'] == 'mock'
 assert s2['top_cpu'][0]['service_name'] == 'worker'
+assert s2['top_memory'][0]['pid'] == 4242
+assert s2['top_memory'][0]['rss_bytes'] > 0
 assert s2['top_disk'][0]['pid'] == 4242
 assert s2['top_disk'][0]['disk_mbps'] > 0
 assert s2['top_network'][0]['container_name'] == 'ix-mock-worker-1'
 assert s2['top_network'][0]['total_mbps'] > 0
 assert s2['top_network'][0]['processes'][0]['pid'] == 4242
-print('mock telemetry v2.2 test: PASS')
+print('mock telemetry v2.3 test: PASS')
