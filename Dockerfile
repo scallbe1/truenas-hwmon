@@ -3,9 +3,11 @@ FROM python:3.13-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     HOST_SYS=/host/sys \
+    HOST_PROC=/host/proc \
     CONFIG_PATH=/config/config.json \
-    POLL_INTERVAL=2 \
-    HISTORY_MINUTES=60
+    POLL_INTERVAL=1 \
+    HISTORY_MINUTES=60 \
+    PROCESS_LIMIT=18
 
 WORKDIR /app
 COPY requirements.txt .

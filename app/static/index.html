@@ -7,115 +7,211 @@
   <style>
     :root {
       color-scheme: dark;
-      --bg:#0b1016; --panel:#131b24; --panel2:#18232f; --text:#e9f0f7; --muted:#8ea0b2;
-      --line:#263546; --good:#5fd39a; --warn:#f2c96d; --bad:#ff7272; --accent:#70a7ff;
+      --bg:#081019; --panel:#101a26; --panel2:#152231; --text:#edf4fb; --muted:#91a5b9;
+      --line:#24364a; --good:#5ed5a1; --warn:#efc76b; --bad:#ff7676; --accent:#75aaff;
+      --cyan:#69d2e7; --purple:#b99cff;
     }
     * { box-sizing:border-box; }
-    body { margin:0; font-family:Inter,Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
-    header { padding:22px 26px 12px; display:flex; justify-content:space-between; gap:20px; align-items:flex-end; }
+    html,body { margin:0; min-height:100%; }
+    body { font-family:Inter,Segoe UI,Arial,sans-serif; background:var(--bg); color:var(--text); }
+    header { padding:20px 24px 10px; display:flex; justify-content:space-between; gap:20px; align-items:flex-end; max-width:1800px; margin:auto; }
     h1 { margin:0; font-size:24px; letter-spacing:.2px; }
     .sub { color:var(--muted); margin-top:5px; font-size:13px; }
-    #updated { color:var(--muted); font-size:12px; }
-    main { padding:12px 26px 28px; max-width:1500px; margin:auto; }
-    .grid { display:grid; grid-template-columns:repeat(12,1fr); gap:14px; }
-    .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; min-width:0; }
-    .span4 { grid-column:span 4; } .span8 { grid-column:span 8; } .span12 { grid-column:span 12; }
-    .panel h2 { margin:0 0 13px; font-size:15px; font-weight:650; }
-    .metric-big { font-size:38px; font-weight:700; line-height:1; }
-    .metric-big small { font-size:16px; color:var(--muted); }
-    .sensor-list { margin-top:14px; display:grid; gap:8px; }
-    .sensor { display:grid; grid-template-columns:minmax(120px,1fr) auto; gap:10px; padding:7px 0; border-top:1px solid rgba(255,255,255,.04); }
+    #updated { color:var(--muted); font-size:12px; white-space:nowrap; }
+    main { padding:12px 24px 28px; max-width:1800px; margin:auto; }
+    .layout { display:grid; grid-template-columns:minmax(0,3.2fr) minmax(360px,1.15fr); gap:14px; align-items:start; }
+    .left { display:grid; grid-template-columns:repeat(12,1fr); gap:14px; min-width:0; }
+    .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:15px; min-width:0; }
+    .span3 { grid-column:span 3; } .span4 { grid-column:span 4; } .span6 { grid-column:span 6; } .span8 { grid-column:span 8; } .span12 { grid-column:span 12; }
+    .panel h2 { margin:0 0 12px; font-size:14px; font-weight:700; letter-spacing:.15px; }
+    .metric-big { font-size:34px; font-weight:750; line-height:1; font-variant-numeric:tabular-nums; }
+    .metric-big small { font-size:14px; color:var(--muted); font-weight:500; }
+    .metric-row { display:flex; gap:14px; flex-wrap:wrap; margin-top:10px; color:var(--muted); font-size:12px; }
+    .metric-row strong { color:var(--text); font-weight:600; font-variant-numeric:tabular-nums; }
+    .sensor-list { margin-top:12px; display:grid; gap:7px; }
+    .sensor { display:grid; grid-template-columns:minmax(100px,1fr) auto; gap:10px; padding:6px 0; border-top:1px solid rgba(255,255,255,.04); }
     .sensor .label { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
     .sensor .value { font-variant-numeric:tabular-nums; }
     table { width:100%; border-collapse:collapse; }
-    th,td { padding:9px 8px; text-align:left; border-bottom:1px solid rgba(255,255,255,.055); font-size:13px; }
-    th { color:var(--muted); font-weight:600; }
-    td.num { text-align:right; font-variant-numeric:tabular-nums; }
-    .badge { padding:3px 7px; border-radius:999px; font-size:11px; background:var(--panel2); color:var(--muted); }
-    .running { color:var(--good); } .stopped,.stopped-or-unused { color:var(--muted); } .low { color:var(--warn); }
-    .bar { width:120px; height:7px; border-radius:6px; background:#253241; overflow:hidden; display:inline-block; vertical-align:middle; }
+    th,td { padding:8px 7px; text-align:left; border-bottom:1px solid rgba(255,255,255,.055); font-size:12px; vertical-align:middle; }
+    th { color:var(--muted); font-weight:600; position:sticky; top:0; background:var(--panel); z-index:1; }
+    td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+    .badge { padding:3px 7px; border-radius:999px; font-size:10px; background:var(--panel2); color:var(--muted); display:inline-block; }
+    .running,.good { color:var(--good); } .stopped,.stopped-or-unused,.muted { color:var(--muted); } .low,.warn { color:var(--warn); } .bad { color:var(--bad); }
+    .bar { width:92px; height:6px; border-radius:6px; background:#253547; overflow:hidden; display:inline-block; vertical-align:middle; }
     .bar > span { display:block; height:100%; background:var(--accent); }
-    .spark { width:100%; height:64px; margin-top:12px; display:block; }
+    .bar.cyan > span { background:var(--cyan); } .bar.purple > span { background:var(--purple); }
+    .spark { width:100%; height:48px; margin-top:10px; display:block; }
     .spark polyline { fill:none; stroke:var(--accent); stroke-width:2; vector-effect:non-scaling-stroke; }
-    .empty { color:var(--muted); font-size:13px; padding:6px 0; }
+    .spark.cyan polyline { stroke:var(--cyan); } .spark.purple polyline { stroke:var(--purple); }
+    .empty { color:var(--muted); font-size:12px; padding:6px 0; }
     .error { border-color:#6e2a2a; color:#ffaaaa; }
     .footer { margin-top:14px; color:var(--muted); font-size:11px; }
-    @media(max-width:900px){ .span4,.span8 { grid-column:span 12; } header{align-items:flex-start;flex-direction:column;} }
+    .process-panel { position:sticky; top:12px; padding:0; overflow:hidden; }
+    .process-head { padding:15px 15px 10px; border-bottom:1px solid var(--line); display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .process-head h2 { margin:0; }
+    .process-scroll { max-height:calc(100vh - 125px); overflow:auto; }
+    .proc-name { max-width:190px; }
+    .proc-title { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+    .proc-cmd { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--muted); font-size:10px; margin-top:2px; }
+    .hot { color:var(--warn); }
+    .gpu-grid { display:grid; gap:12px; }
+    .gpu-device { border-top:1px solid rgba(255,255,255,.05); padding-top:10px; }
+    .gpu-device:first-child { border-top:0; padding-top:0; }
+    .gpu-name { font-weight:650; margin-bottom:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .gpu-stats { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .gpu-stat small { color:var(--muted); display:block; margin-bottom:3px; font-size:10px; text-transform:uppercase; letter-spacing:.4px; }
+    .gpu-stat strong { font-size:17px; font-variant-numeric:tabular-nums; }
+    .disk-model { color:var(--muted); font-size:10px; display:block; max-width:260px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
+    .io-read { color:var(--cyan); } .io-write { color:var(--purple); }
+    @media(max-width:1250px){
+      .layout { grid-template-columns:1fr; }
+      .process-panel { position:static; }
+      .process-scroll { max-height:none; overflow:visible; }
+    }
+    @media(max-width:900px){ .span3,.span4,.span6,.span8 { grid-column:span 12; } header{align-items:flex-start;flex-direction:column;} .gpu-stats{grid-template-columns:repeat(2,1fr);} }
   </style>
 </head>
 <body>
 <header>
-  <div><h1>TrueNAS Hardware Monitor</h1><div class="sub" id="subtitle">Loading hardware sensors…</div></div>
+  <div><h1>TrueNAS Hardware Monitor</h1><div class="sub" id="subtitle">Loading host telemetry…</div></div>
   <div id="updated"></div>
 </header>
 <main>
-  <div class="grid">
-    <section class="panel span4" id="cpu-panel"><h2>CPU</h2><div id="cpu"></div></section>
-    <section class="panel span4" id="board-panel"><h2>Motherboard</h2><div id="board"></div></section>
-    <section class="panel span4"><h2>Sensor devices</h2><div id="devices"></div></section>
-    <section class="panel span12"><h2>Physical fan headers</h2><div id="headers"></div></section>
-    <section class="panel span12"><h2>Fans</h2><div id="fans"></div></section>
-    <section class="panel span12"><h2>Other temperatures</h2><div id="other"></div></section>
+  <div class="layout">
+    <div class="left">
+      <section class="panel span3" id="cpu-panel"><h2>CPU</h2><div id="cpu"></div></section>
+      <section class="panel span3"><h2>Memory</h2><div id="memory"></div></section>
+      <section class="panel span6"><h2>NVIDIA GPU</h2><div id="gpu"></div></section>
+
+      <section class="panel span6" id="board-panel"><h2>Motherboard</h2><div id="board"></div></section>
+      <section class="panel span6"><h2>Physical fan headers</h2><div id="headers"></div></section>
+
+      <section class="panel span12"><h2>Fans</h2><div id="fans"></div></section>
+      <section class="panel span12"><h2>Disks · temperature & live I/O</h2><div id="disks"></div></section>
+      <section class="panel span8"><h2>Other temperatures</h2><div id="other"></div></section>
+      <section class="panel span4"><h2>Sensor devices</h2><div id="devices"></div></section>
+    </div>
+
+    <aside class="panel process-panel">
+      <div class="process-head">
+        <h2>Top processes · live</h2>
+        <span class="badge" id="process-rate">1 s refresh</span>
+      </div>
+      <div class="process-scroll" id="processes"></div>
+    </aside>
   </div>
-  <div class="footer">Read-only monitoring. PWM values are displayed but never written.</div>
+  <div class="footer">Read-only host telemetry. PWM values are displayed but never written. Process I/O may show “—” when Linux denies that per-process counter to the unprivileged monitor.</div>
 </main>
 <script>
 let history = {};
 function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
-function tempClass(v,warn,crit){ if(v==null)return ''; if(v>=crit)return 'bad'; if(v>=warn)return 'warn'; return 'good'; }
-function sparkline(id){
-  const pts=(history[id]||[]).slice(-120); if(pts.length<2)return '';
+function bytes(v){v=Number(v||0);const u=['B','KB','MB','GB','TB'];let i=0;while(v>=1000&&i<u.length-1){v/=1000;i++;}return `${v.toFixed(i<2?0:1)} ${u[i]}`;}
+function pct(v){return v==null?'—':`${Number(v).toFixed(1)}%`;}
+function temp(v){return v==null?'—':`${Number(v).toFixed(1)} °C`;}
+function rate(v){return v==null?'—':`${Number(v).toFixed(v>=10?1:2)} MB/s`;}
+function sparkline(id, cls=''){
+  const pts=(history[id]||[]).slice(-180); if(pts.length<2)return '';
   const vals=pts.map(p=>p[1]), min=Math.min(...vals), max=Math.max(...vals), span=(max-min)||1;
-  const xy=vals.map((v,i)=>`${(i/(vals.length-1))*100},${58-((v-min)/span)*52}`).join(' ');
-  return `<svg class="spark" viewBox="0 0 100 64" preserveAspectRatio="none"><polyline points="${xy}"/></svg>`;
+  const xy=vals.map((v,i)=>`${(i/(vals.length-1))*100},${44-((v-min)/span)*38}`).join(' ');
+  return `<svg class="spark ${cls}" viewBox="0 0 100 48" preserveAspectRatio="none"><polyline points="${xy}"/></svg>`;
 }
-function tempBlock(group, warn, crit){
+function usageBar(v, cls=''){ if(v==null)return ''; const p=Math.max(0,Math.min(100,Number(v))); return `<span class="bar ${cls}"><span style="width:${p}%"></span></span>`; }
+function tempBlock(group){
   const arr=group.temperatures||[];
   if(!arr.length)return '<div class="empty">No sensors exposed</div>';
-  const hot=group.hottest_c;
-  return `<div class="metric-big">${hot!=null?hot.toFixed(1):'—'}<small> °C hottest</small></div>`+
-    (arr[0]?sparkline(arr[0].id):'')+
-    `<div class="sensor-list">${arr.map(s=>`<div class="sensor"><div class="label">${esc(s.label)}</div><div class="value">${Number(s.celsius).toFixed(1)} °C</div></div>`).join('')}</div>`;
+  return `<div class="metric-big">${temp(group.hottest_c).replace(' °C','')}<small> °C hottest</small></div>`+
+    `<div class="sensor-list">${arr.map(s=>`<div class="sensor"><div class="label">${esc(s.label)}</div><div class="value">${temp(s.celsius)}</div></div>`).join('')}</div>`;
+}
+function renderCPU(s){
+  const u=s.cpu.usage_percent;
+  const load=s.cpu.load||{};
+  const temps=s.cpu.temperatures||[];
+  return `<div class="metric-big">${u==null?'—':Number(u).toFixed(1)}<small> %</small></div>`+
+    `${usageBar(u)}${sparkline('system:cpu_percent')}`+
+    `<div class="metric-row"><span>Hottest <strong>${temp(s.cpu.hottest_c)}</strong></span><span>Load <strong>${load.load1==null?'—':Number(load.load1).toFixed(2)}</strong></span></div>`+
+    `<div class="sensor-list">${temps.slice(0,10).map(t=>`<div class="sensor"><div class="label">${esc(t.label)}</div><div class="value">${temp(t.celsius)}</div></div>`).join('')}</div>`;
+}
+function renderMemory(m){
+  if(!m||!m.total_bytes)return '<div class="empty">Host memory data unavailable</div>';
+  return `<div class="metric-big">${pct(m.used_percent).replace('%','')}<small> % used</small></div>`+
+    `${usageBar(m.used_percent,'purple')}${sparkline('system:memory_percent','purple')}`+
+    `<div class="metric-row"><span>Used <strong>${bytes(m.used_bytes)}</strong></span><span>Available <strong>${bytes(m.available_bytes)}</strong></span><span>Total <strong>${bytes(m.total_bytes)}</strong></span></div>`;
+}
+function renderGPU(g){
+  if(!g||!g.available){return `<div class="empty">NVIDIA telemetry unavailable${g?.error?`: ${esc(g.error)}`:''}</div>`;}
+  return `<div class="gpu-grid">${(g.gpus||[]).map(x=>`<div class="gpu-device">
+    <div class="gpu-name">GPU ${x.index} · ${esc(x.name)}</div>
+    <div class="gpu-stats">
+      <div class="gpu-stat"><small>GPU usage</small><strong>${x.util_percent}%</strong>${usageBar(x.util_percent)}</div>
+      <div class="gpu-stat"><small>VRAM</small><strong>${pct(x.vram_percent)}</strong><div class="sub">${bytes(x.vram_used_bytes)} / ${bytes(x.vram_total_bytes)}</div></div>
+      <div class="gpu-stat"><small>Temperature</small><strong>${temp(x.temperature_c)}</strong><div class="sub">${x.fan_percent==null?'Fan —':`Fan ${x.fan_percent}%`}</div></div>
+      <div class="gpu-stat"><small>Power</small><strong>${x.power_w==null?'—':`${Number(x.power_w).toFixed(1)} W`}</strong></div>
+      <div class="gpu-stat"><small>Memory engine</small><strong>${x.memory_util_percent}%</strong></div>
+      <div class="gpu-stat"><small>P-state</small><strong>${x.pstate==null?'—':`P${x.pstate}`}</strong></div>
+    </div>
+    ${sparkline(`gpu:${x.index}:util`,'cyan')}
+  </div>`).join('')}</div>`;
 }
 function renderHeaders(headers, fans){
   if(!headers.length)return '<div class="empty">No physical-header inventory configured</div>';
-  const exposed=fans.length;
-  return `<div class="sub" style="margin-bottom:10px">Board inventory: ${headers.length} physical headers · Linux currently exposes ${exposed} logical fan/PWM channels. Physical-to-logical mapping remains configurable until identified.</div>`+
-    `<div style="display:flex;flex-wrap:wrap;gap:8px">${headers.map(h=>`<span class="badge">${esc(h)}</span>`).join('')}</div>`;
+  return `<div class="sub" style="margin-bottom:10px">${headers.length} physical headers · Linux currently exposes ${fans.length} logical fan/PWM channels.</div>`+
+    `<div style="display:flex;flex-wrap:wrap;gap:7px">${headers.map(h=>`<span class="badge">${esc(h)}</span>`).join('')}</div>`;
 }
 function renderFans(fans){
   if(!fans.length)return '<div class="empty">No fan sensors exposed</div>';
   return `<table><thead><tr><th>Header / label</th><th>Kernel</th><th class="num">RPM</th><th>PWM</th><th>Status</th></tr></thead><tbody>`+
-    fans.map(f=>{let p=f.pwm_percent;return `<tr><td>${esc(f.label)}</td><td><span class="badge">${esc(f.kernel_name)}</span></td><td class="num">${f.rpm==null?'—':f.rpm}</td><td>${p==null?'—':`<span class="bar"><span style="width:${Math.max(0,Math.min(100,p))}%"></span></span> &nbsp;${p}%`}</td><td class="${esc(f.state)}">${esc(f.state.replaceAll('-',' '))}${f.pwm_writable?' · writable':''}</td></tr>`}).join('')+
+    fans.map(f=>{let p=f.pwm_percent;return `<tr><td>${esc(f.label)}</td><td><span class="badge">${esc(f.kernel_name)}</span></td><td class="num">${f.rpm==null?'—':f.rpm}</td><td>${p==null?'—':`${usageBar(p)} &nbsp;${p}%`}</td><td class="${esc(f.state)}">${esc(f.state.replaceAll('-',' '))}</td></tr>`}).join('')+
+    `</tbody></table>`;
+}
+function renderDisks(disks){
+  if(!disks.length)return '<div class="empty">No physical disks discovered through host /sys and /proc.</div>';
+  return `<table><thead><tr><th>Disk</th><th class="num">Temp</th><th class="num">Read</th><th class="num">Write</th></tr></thead><tbody>`+
+    disks.map(d=>`<tr><td><strong>${esc(d.name)}</strong><span class="disk-model">${esc(d.model)}</span></td><td class="num ${d.temperature_c>=50?'warn':''}">${temp(d.temperature_c)}</td><td class="num io-read">${rate(d.read_mbps)}</td><td class="num io-write">${rate(d.write_mbps)}</td></tr>`).join('')+
     `</tbody></table>`;
 }
 function renderOther(arr){
   if(!arr.length)return '<div class="empty">No additional temperature sensors exposed</div>';
-  return `<table><thead><tr><th>Device</th><th>Sensor</th><th class="num">Temperature</th></tr></thead><tbody>${arr.map(s=>`<tr><td>${esc(s.chip)}</td><td>${esc(s.label)}</td><td class="num">${Number(s.celsius).toFixed(1)} °C</td></tr>`).join('')}</tbody></table>`;
+  return `<table><thead><tr><th>Device</th><th>Sensor</th><th class="num">Temperature</th></tr></thead><tbody>${arr.map(s=>`<tr><td>${esc(s.block_device||s.chip)}</td><td>${esc(s.label)}</td><td class="num">${temp(s.celsius)}</td></tr>`).join('')}</tbody></table>`;
 }
 function renderDevices(arr){
   if(!arr.length)return '<div class="empty">No hwmon devices found</div>';
   return `<div class="sensor-list">${arr.map(d=>`<div class="sensor"><div class="label">${esc(d.name)}</div><div class="value">${d.temperatures}T / ${d.fans}F</div></div>`).join('')}</div>`;
+}
+function renderProcesses(arr){
+  if(!arr||!arr.length)return '<div class="empty" style="padding:14px">Waiting for a second sample…</div>';
+  return `<table><thead><tr><th>Process</th><th class="num">CPU</th><th class="num">RAM</th><th class="num">GPU</th><th class="num">R/W</th></tr></thead><tbody>`+
+    arr.map(p=>{const io=(p.read_mbps==null&&p.write_mbps==null)?'—':`${Number(p.read_mbps||0).toFixed(1)}/${Number(p.write_mbps||0).toFixed(1)}`; return `<tr>
+      <td class="proc-name"><div class="proc-title">${esc(p.name)} <span class="muted">#${p.pid}</span></div><div class="proc-cmd" title="${esc(p.command)}">${esc(p.command)}</div></td>
+      <td class="num ${p.cpu_percent>=50?'hot':''}">${Number(p.cpu_percent).toFixed(1)}%</td>
+      <td class="num">${bytes(p.rss_bytes)}</td>
+      <td class="num">${p.gpu_vram_bytes?bytes(p.gpu_vram_bytes):'—'}</td>
+      <td class="num"><span class="io-read">${io}</span></td>
+    </tr>`}).join('')+`</tbody></table>`;
 }
 async function refreshHistory(){ try{ const r=await fetch('/api/history',{cache:'no-store'}); const j=await r.json(); history=j.series||{}; }catch(e){} }
 async function refresh(){
   try{
     const r=await fetch('/api/status',{cache:'no-store'}), s=await r.json();
     if(s.error) throw new Error(s.error);
-    const w=s.thresholds?.warn_c??70,c=s.thresholds?.critical_c??85;
     document.getElementById('subtitle').textContent=`${s.system_name} · ${s.motherboard_name}`;
     document.getElementById('updated').textContent=`Updated ${new Date(s.timestamp*1000).toLocaleTimeString()}`;
-    document.getElementById('cpu').innerHTML=tempBlock(s.cpu,w,c);
-    document.getElementById('board').innerHTML=tempBlock(s.motherboard,w,c);
+    document.getElementById('process-rate').textContent=`${Number(s.poll_interval||1).toFixed(1)} s refresh`;
+    document.getElementById('cpu').innerHTML=renderCPU(s);
+    document.getElementById('memory').innerHTML=renderMemory(s.memory);
+    document.getElementById('gpu').innerHTML=renderGPU(s.gpu);
+    document.getElementById('board').innerHTML=tempBlock(s.motherboard);
     document.getElementById('headers').innerHTML=renderHeaders(s.physical_headers||[],s.fans||[]);
     document.getElementById('fans').innerHTML=renderFans(s.fans||[]);
+    document.getElementById('disks').innerHTML=renderDisks(s.disks||[]);
     document.getElementById('other').innerHTML=renderOther(s.other_temperatures||[]);
     document.getElementById('devices').innerHTML=renderDevices(s.devices||[]);
-  } catch(e){ document.getElementById('subtitle').textContent='Unable to read host hwmon sensors'; document.getElementById('cpu-panel').classList.add('error'); document.getElementById('cpu').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
+    document.getElementById('processes').innerHTML=renderProcesses(s.processes||[]);
+  } catch(e){ document.getElementById('subtitle').textContent='Unable to read host telemetry'; document.getElementById('cpu-panel').classList.add('error'); document.getElementById('cpu').innerHTML=`<div class="empty">${esc(e.message)}</div>`; }
 }
 refreshHistory().then(refresh);
-setInterval(refresh,2000);
-setInterval(refreshHistory,10000);
+setInterval(refresh,1000);
+setInterval(refreshHistory,5000);
 </script>
 </body>
 </html>

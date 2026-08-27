@@ -1,25 +1,31 @@
 # TrueNAS Hardware Monitor
 
-A small, read-only web dashboard for TrueNAS SCALE/Linux hardware-monitoring sensors exposed through `/sys/class/hwmon`.
+A lightweight, read-only live hardware and resource dashboard for TrueNAS SCALE/Linux.
 
-Designed around an ASRock Z590 Taichi / Nuvoton NCT6686D system, but discovery is generic and works with normal Linux `hwmon` devices such as `coretemp`, `drivetemp`, `nvme`, and Nuvoton monitor chips.
+It was designed around an ASRock Z590 Taichi / Nuvoton NCT6686D system with an NVIDIA RTX GPU, but the Linux sensor discovery is generic.
 
-## What it shows
+## Live dashboard
 
-- CPU package/core temperatures exposed by `coretemp`
+The dashboard refreshes once per second by default and shows:
+
+- CPU utilization, load average, package/core temperatures
+- Ordinary system RAM used/available/total
+- NVIDIA GPU utilization through NVML
+- NVIDIA VRAM used/total and percentage
+- NVIDIA GPU temperature, power, fan percentage, memory-engine utilization and P-state
 - NCT6686D motherboard temperatures
-- Fan tachometer RPM
-- Current PWM duty as both 0-255 and percentage
-- Whether a PWM sysfs node is writable
-- Other `hwmon` temperatures such as drive/NVMe temperatures
-- 60 minutes of in-memory history (configurable)
-- Configurable friendly labels for `fan1`, `fan2`, etc.
+- Fan tachometer RPM and current PWM duty
+- Eight configured physical Z590 Taichi fan headers vs. the logical channels exposed by Linux
+- Physical disk/NVMe temperatures
+- Live read and write throughput per physical disk
+- A live right-side process table showing CPU, RAM, GPU VRAM and per-process read/write rates when Linux permits those counters
+- 60 minutes of selected in-memory history for sparklines
 
-The app **never writes to PWM controls**.
+The app **never writes to PWM controls** and does not create a CUDA compute context. NVIDIA telemetry uses NVML only.
 
-## TrueNAS host prerequisite
+## TrueNAS host prerequisite for Z590 Taichi fan sensors
 
-On the Z590 Taichi, load the NCT6686D-compatible driver on the TrueNAS host:
+Load the NCT6686D-compatible driver on the TrueNAS host:
 
 ```sh
 modprobe nct6683 force=1
@@ -33,14 +39,45 @@ dmesg | grep -iE 'nct6683|nct6686'
 
 For persistence in TrueNAS, add `modprobe nct6683 force=1` as a **Post Init** command in System Settings -> Advanced -> Init/Shutdown Scripts.
 
-## Run directly on TrueNAS
+## GitHub / GHCR build
 
-Clone the repository into a persistent dataset, for example `/mnt/pool1/truenas-hwmon`, then:
+The included `.github/workflows/docker-publish.yml` runs the mock host telemetry test and publishes the image to GitHub Container Registry whenever you push to the default branch.
 
-```sh
-cd /mnt/pool1/truenas-hwmon
-docker compose up -d --build
+For this repository the image is:
+
+```text
+ghcr.io/scallbe1/truenas-hwmon:latest
 ```
+
+## TrueNAS Custom App
+
+Use the included `truenas-custom-app.yml`. Important host interfaces are mounted read-only:
+
+```yaml
+volumes:
+  - /sys:/host/sys:ro
+  - /proc:/host/proc:ro
+  - /mnt/pool1/truenas-hwmon/config:/config:ro
+```
+
+The NVIDIA runtime is requested only so NVML can inspect the GPU:
+
+```yaml
+deploy:
+  resources:
+    reservations:
+      devices:
+        - driver: nvidia
+          count: all
+          capabilities:
+            - gpu
+
+environment:
+  NVIDIA_VISIBLE_DEVICES: all
+  NVIDIA_DRIVER_CAPABILITIES: utility
+```
+
+This does not reserve VRAM or load a model. It allows the monitor to query GPU state while ComfyUI is using the GPU.
 
 Open:
 
@@ -48,51 +85,9 @@ Open:
 http://TRUENAS-IP:30200
 ```
 
-## GitHub / GHCR build
-
-The included `.github/workflows/docker-publish.yml` runs the mock hardware test and publishes the image to GitHub Container Registry whenever you push to `main`/`master`, push a `v*` tag, or run the workflow manually. It uses the current Docker GitHub Actions major releases and publishes `latest` from the default branch.
-
-For a repository named `scallbe1/truenas-hwmon`, the resulting image is:
-
-```text
-ghcr.io/scallbe1/truenas-hwmon:latest
-```
-
-If the GHCR package is private, either make the package public or configure registry credentials in TrueNAS.
-
-## TrueNAS Custom App YAML
-
-The repository includes `truenas-custom-app.yml`, already pointed at `ghcr.io/scallbe1/truenas-hwmon:latest`. Its contents are:
-
-```yaml
-services:
-  truenas-hwmon:
-    image: ghcr.io/YOUR-GITHUB-USER/truenas-hwmon:latest
-    restart: unless-stopped
-    ports:
-      - "30200:8080"
-    environment:
-      HOST_SYS: /host/sys
-      CONFIG_PATH: /config/config.json
-      POLL_INTERVAL: "2"
-      HISTORY_MINUTES: "60"
-    volumes:
-      - /sys:/host/sys:ro
-      - /mnt/pool1/truenas-hwmon/config:/config:ro
-    read_only: true
-    tmpfs:
-      - /tmp:size=16m,mode=1777
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-```
-
-Create `/mnt/pool1/truenas-hwmon/config/config.json` first using the included example.
-
 ## Fan labels
 
-Edit `config/config.json` as you identify the motherboard headers:
+Edit `/mnt/pool1/truenas-hwmon/config/config.json` as physical motherboard headers are identified:
 
 ```json
 {
@@ -107,30 +102,43 @@ Edit `config/config.json` as you identify the motherboard headers:
 }
 ```
 
-No rebuild is needed. The config is re-read during polling.
+No image rebuild is needed for label changes because configuration is re-read during polling.
 
 ## Security model
 
-- `/sys` is mounted read-only.
+- `/sys` and `/proc` are mounted read-only.
 - The container runs as UID 10001, not root.
 - All Linux capabilities are dropped.
 - `no-new-privileges` is enabled.
-- The container filesystem is read-only except a tiny `/tmp` tmpfs.
+- The container filesystem is read-only except a small `/tmp` tmpfs.
 - No Docker socket is mounted.
-- The application has no API that writes fan/PWM values.
+- There is no API for writing fan/PWM values.
+- Per-process `/proc/<pid>/io` is treated as optional; when Linux does not allow that counter, the UI displays `—` instead of requesting elevated privileges.
 
 ## API
 
-- `GET /api/status` - latest sensor snapshot
-- `GET /api/history` - in-memory history
+- `GET /api/status` - latest full telemetry snapshot
+- `GET /api/history` - in-memory history series
 - `GET /api/config` - effective configuration
-- `GET /health` - health/discovery status
+- `GET /health` - service, hwmon and NVIDIA discovery status
 
 ## Environment variables
 
 | Variable | Default | Purpose |
 |---|---:|---|
 | `HOST_SYS` | `/host/sys` | Host sysfs mount |
+| `HOST_PROC` | `/host/proc` | Host procfs mount |
 | `CONFIG_PATH` | `/config/config.json` | Friendly labels/settings |
-| `POLL_INTERVAL` | `2` | Polling interval in seconds |
+| `POLL_INTERVAL` | `1` | Backend polling interval in seconds |
 | `HISTORY_MINUTES` | `60` | In-memory history retention |
+| `PROCESS_LIMIT` | `18` | Maximum live processes returned |
+
+## Tests
+
+```sh
+python3 -m pip install -r requirements.txt
+python3 tests/make_mock_hwmon.py
+PYTHONPATH=. python3 tests/test_mock.py
+```
+
+The mock host includes the Z590 Taichi readings used during development, a physical disk temperature, memory counters, disk I/O, and a changing process sample.
