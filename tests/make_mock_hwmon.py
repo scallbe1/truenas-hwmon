@@ -69,10 +69,16 @@ put_hwmon('hwmon1', 'nct6686', {
     'in7_input': 1344, 'in7_label': 'VIN7',
 })
 
-# Make drivetemp resemble real sysfs so the monitor can map temp -> sda.
-drive_hwmon = sysroot / 'devices' / 'mock' / 'block' / 'sda' / 'device' / 'hwmon' / 'hwmon2'
-put_dir(drive_hwmon, 'drivetemp', {'temp1_input': 34000, 'temp1_label': 'Composite'})
-link_directory(drive_hwmon, base / 'hwmon2')
+# Real drivetemp nodes are children of a SCSI device while block/sdX is a
+# sibling. Make two out-of-order devices so tests cannot rely on enumeration.
+scsi1 = sysroot / 'devices' / 'mock' / 'host0' / 'target0_0_1' / '0_0_1_0'
+scsi2 = sysroot / 'devices' / 'mock' / 'host0' / 'target0_0_2' / '0_0_2_0'
+drive_hwmon1 = scsi1 / 'hwmon' / 'hwmon2'
+drive_hwmon2 = scsi2 / 'hwmon' / 'hwmon4'
+put_dir(drive_hwmon1, 'drivetemp', {'temp1_input': 35000, 'temp1_label': 'Composite'})
+put_dir(drive_hwmon2, 'drivetemp', {'temp1_input': 40000, 'temp1_label': 'Composite'})
+link_directory(drive_hwmon1, base / 'hwmon2')
+link_directory(drive_hwmon2, base / 'hwmon4')
 
 # Make a NIC hwmon sensor and physical interface share the same PCI owner.
 # Windows cannot create colon-containing fixture paths, so use an equivalent mock spelling.
@@ -100,9 +106,17 @@ for key, value in {
 }.items():
     (interface / 'statistics' / key).write_text(f'{value}\n')
 
-(sysroot / 'block' / 'sda' / 'device').mkdir(parents=True, exist_ok=True)
-(sysroot / 'block' / 'sda' / 'device' / 'vendor').write_text('ATA\n')
-(sysroot / 'block' / 'sda' / 'device' / 'model').write_text('MockDisk 8TB\n')
+for name, scsi, model in (
+    ('sda', scsi2, 'MockDisk A 8TB'),
+    ('sdb', scsi1, 'MockDisk B 8TB'),
+):
+    inventory_device = sysroot / 'block' / name / 'device'
+    inventory_device.mkdir(parents=True, exist_ok=True)
+    (inventory_device / 'vendor').write_text('ATA\n')
+    (inventory_device / 'model').write_text(model + '\n')
+    class_block = sysroot / 'class' / 'block' / name
+    class_block.mkdir(parents=True, exist_ok=True)
+    link_directory(scsi, class_block / 'device')
 
 (procroot / 'meminfo').write_text(
     'MemTotal:       131072000 kB\n'
@@ -113,7 +127,10 @@ for key, value in {
 )
 (procroot / 'loadavg').write_text('1.25 1.10 0.95 2/500 12345\n')
 (procroot / 'stat').write_text('cpu  1000 0 500 5000 100 0 0 0 0 0\n')
-(procroot / 'diskstats').write_text('8 0 sda 100 0 10000 0 50 0 20000 0 0 0 0\n')
+(procroot / 'diskstats').write_text(
+    '8 0 sda 100 0 10000 0 50 0 20000 0 0 0 0\n'
+    '8 16 sdb 90 0 9000 0 40 0 18000 0 0 0 0\n'
+)
 
 cid = 'a' * 64
 cdir = dockerroot / cid

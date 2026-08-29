@@ -28,10 +28,12 @@ assert s1['voltages'][1]['label'] == 'VIN0'
 assert s1['voltages'][1]['volts'] == 0.768
 assert s1['memory']['total_bytes'] == 131072000 * 1024
 assert s1['memory']['used_percent'] > 80
-assert len(s1['disks']) == 1
-assert s1['disks'][0]['name'] == 'sda'
-assert s1['disks'][0]['temperature_c'] == 34.0
-assert any(x['chip'] == 'drivetemp' for x in s1['other_temperatures'])
+assert len(s1['disks']) == 2
+disks = {disk['name']: disk for disk in s1['disks']}
+assert disks['sda']['temperature_c'] == 40.0
+assert disks['sdb']['temperature_c'] == 35.0
+drive_temps = [x for x in s1['other_temperatures'] if x['chip'] == 'drivetemp']
+assert {x['block_device'] for x in drive_temps} == {'sda', 'sdb'}
 assert len(s1['network_interfaces']) == 1
 assert s1['network_interfaces'][0]['name'] == 'enp6s0'
 assert s1['network_interfaces'][0]['speed_mbps'] == 2500

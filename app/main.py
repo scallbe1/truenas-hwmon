@@ -122,14 +122,40 @@ def sensor_label(base: Path, prefix: str, idx: int, fallback: str) -> str:
     return safe_name(read_text(base / f"{prefix}{idx}_label"), fallback)
 
 
-def hwmon_device_identity(base: Path) -> dict[str, str | None]:
+def block_device_from_hwmon_path(resolved_hwmon: Path) -> str | None:
+    """Match a SCSI/SATA hwmon node to its sibling block device in sysfs."""
+    matches: list[tuple[int, str]] = []
+    for name in physical_block_devices():
+        if not re.fullmatch(r"(?:sd[a-z]+|hd[a-z]+)", name):
+            continue
+        for block_root in (SYS_ROOT / "class" / "block", SYS_ROOT / "block"):
+            device_link = block_root / name / "device"
+            try:
+                if not device_link.exists():
+                    continue
+                resolved_device = device_link.resolve()
+                resolved_hwmon.relative_to(resolved_device)
+            except (OSError, ValueError):
+                continue
+            matches.append((len(resolved_device.parts), name))
+
+    if not matches:
+        return None
+    # Prefer the nearest ancestor if an unusual sysfs topology yields more than one match.
+    return max(matches)[1]
+
+
+def hwmon_device_identity(base: Path, match_scsi_block: bool = False) -> dict[str, str | None]:
     """Infer storage, network and PCI ownership from a resolved hwmon path."""
     try:
-        resolved = str(base.resolve()).replace("\\", "/")
+        resolved_path = base.resolve()
     except OSError:
-        resolved = str(base).replace("\\", "/")
+        resolved_path = base
+    resolved = str(resolved_path).replace("\\", "/")
     m = re.search(r"/block/([^/]+)", resolved)
     block = m.group(1) if m else None
+    if block is None and match_scsi_block:
+        block = block_device_from_hwmon_path(resolved_path)
     m = re.search(r"/nvme/(nvme\d+)(?:/|$)", resolved)
     controller = m.group(1) if m else None
     m = re.search(r"/net/([^/]+)(?:/|$)", resolved)
@@ -150,7 +176,7 @@ def hwmon_block_identity(base: Path) -> tuple[str | None, str | None]:
 
 def read_temperatures(base: Path, chip: str) -> list[dict[str, Any]]:
     sensors: list[dict[str, Any]] = []
-    identity = hwmon_device_identity(base)
+    identity = hwmon_device_identity(base, match_scsi_block=chip == "drivetemp")
     paths = sorted(
         base.glob("temp*_input"),
         key=lambda x: int(re.search(r"temp(\d+)_", x.name).group(1)) if re.search(r"temp(\d+)_", x.name) else 999,
