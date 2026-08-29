@@ -1,6 +1,6 @@
-# TrueNAS Hardware Monitor v2.4
+# TrueNAS Hardware Monitor v2.5
 
-A compact, live hardware/resource dashboard for TrueNAS SCALE/Linux, designed around the ASRock Z590 Taichi / Nuvoton NCT6686D and NVIDIA GPUs.
+A compact, live hardware/resource dashboard for TrueNAS SCALE/Linux, developed on an ASRock Z590 Taichi but driven by generic Linux hwmon, sysfs, procfs and NVML telemetry.
 
 ## Dashboard
 
@@ -10,9 +10,11 @@ The desktop layout is intentionally constrained to one browser screen and refres
 - System RAM used/available/total
 - NVIDIA GPU utilization, VRAM, temperature, fan, power, memory-engine utilization and P-state via NVML
 - Every NCT6686D motherboard temperature
+- Every exposed hwmon voltage input, including the Z590 Taichi NCT6686D VIN bank
 - Every exposed fan RPM and PWM duty plus the eight configured physical Z590 Taichi headers
 - Physical disk/NVMe temperature and live read/write throughput
-- A consolidated **All temperatures** matrix so CPU, motherboard, storage and other hwmon temperatures are visible without scrolling
+- Device-backed physical interfaces with link state/speed, driver, temperature, live RX/TX and cumulative error/drop counters
+- A consolidated **Hardware sensors** matrix for CPU, motherboard, storage, network, voltage and other telemetry
 - Right-side independent rankings:
   - Top 5 CPU processes
   - Top 5 network containers/network namespaces
@@ -25,7 +27,7 @@ The app never writes fan/PWM controls and NVML monitoring does not allocate mode
 
 ### Network accounting note
 
-Linux `/proc` exposes network byte counters per **network namespace**, not truthful per-process network byte totals. v2.4 therefore ranks network namespaces/containers and shows the busiest process(es) in that namespace for context. It does not falsely assign the entire container's traffic to one process. True per-process network attribution would require a privileged packet/eBPF collector.
+Linux `/proc` exposes network byte counters per **network namespace**, not truthful per-process network byte totals. The process ranking therefore ranks network namespaces/containers and shows the busiest process(es) in that namespace for context. Physical-interface rates are sampled independently from `/sys/class/net`. True per-process network attribution would require a privileged packet/eBPF collector.
 
 ## Z590 Taichi sensor prerequisite
 
@@ -78,15 +80,15 @@ Open:
 http://TRUENAS-IP:30200
 ```
 
-The page is served with `Cache-Control: no-store` and displays **v2.4** beside the title so it is obvious when the new image is actually running.
+The page is served with `Cache-Control: no-store` and displays **v2.5** beside the title so it is obvious when the new image is actually running.
 
-## Fan labels
+## Friendly labels
 
-Edit `/mnt/pool1/truenas-hwmon/config/config.json` as physical headers are identified. No image rebuild is needed.
+Edit `/mnt/pool1/truenas-hwmon/config/config.json` as physical headers and network interfaces are identified. `fan_labels` uses keys such as `fan1`; `network_labels` uses interface names; and `voltage_labels` accepts `in1` or a chip-specific key such as `nct6686:in1`. No image rebuild is needed.
 
 ## API
 
-- `GET /api/status` — current sensors plus `top_cpu`, `top_network`, `top_disk`
+- `GET /api/status` — current sensors, voltages, physical interfaces and process rankings
 - `GET /api/history` — selected in-memory history
 - `GET /api/config` — effective configuration
 - `GET /health` — sensor/NVIDIA discovery information
@@ -111,8 +113,16 @@ python3 tests/make_mock_hwmon.py
 PYTHONPATH=. python3 tests/test_mock.py
 ```
 
-The mock verifies NCT6686D sensors, disk temperature/I/O, memory, container-name resolution, per-process CPU/disk I/O and network-namespace throughput.
+The mock verifies NCT6686D temperatures/fans/voltages, disk temperature/I/O, a PCI-owned NIC temperature and traffic, memory, container-name resolution, per-process CPU/disk I/O and network-namespace throughput.
 
+
+## v2.5 hardware expansion
+
+- Adds generic standard-hwmon voltage discovery rather than hard-coding the NCT6686D channels.
+- Adds device-backed physical-interface discovery and live RX/TX, link, driver, error and drop telemetry.
+- Associates NIC hwmon temperatures with interfaces through their shared PCI address.
+- Replaces the four-way temperature matrix with a six-way hardware-sensor matrix.
+- Keeps the existing read-only mounts and does not require new capabilities.
 
 ## v2.4 dashboard changes
 

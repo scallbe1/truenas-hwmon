@@ -9,6 +9,8 @@
     "fan5": "Unknown fan 5",
     "fan6": "Unknown fan 6"
   },
+  "voltage_labels": {},
+  "network_labels": {},
   "physical_headers": [
     "CPU_FAN1",
     "CPU_FAN2/WP",

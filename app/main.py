@@ -42,6 +42,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "fan7": "Unknown fan 7",
         "fan8": "Unknown fan 8",
     },
+    "voltage_labels": {},
+    "network_labels": {},
     "physical_headers": [
         "CPU_FAN1",
         "CPU_FAN2/WP",
@@ -80,14 +82,20 @@ def safe_name(value: str | None, fallback: str) -> str:
     return value if value else fallback
 
 
+def pci_address_from_path(value: str) -> str | None:
+    """Return the last PCI BDF in a sysfs path; underscores support portable mocks."""
+    matches = re.findall(r"/(\d{4}[:_]\d{2}[:_]\d{2}\.\d)(?:/|$)", value.replace("\\", "/"))
+    return matches[-1].replace("_", ":") if matches else None
+
+
 def load_config() -> dict[str, Any]:
     cfg = json.loads(json.dumps(DEFAULT_CONFIG))
     try:
         user_cfg = json.loads(CONFIG_PATH.read_text())
         if isinstance(user_cfg, dict):
             for key, value in user_cfg.items():
-                if key == "fan_labels" and isinstance(value, dict):
-                    cfg["fan_labels"].update({str(k): str(v) for k, v in value.items()})
+                if key in {"fan_labels", "voltage_labels", "network_labels"} and isinstance(value, dict):
+                    cfg[key].update({str(k): str(v) for k, v in value.items()})
                 else:
                     cfg[key] = value
     except (OSError, json.JSONDecodeError):
@@ -114,22 +122,35 @@ def sensor_label(base: Path, prefix: str, idx: int, fallback: str) -> str:
     return safe_name(read_text(base / f"{prefix}{idx}_label"), fallback)
 
 
-def hwmon_block_identity(base: Path) -> tuple[str | None, str | None]:
-    """Return (block_device, nvme_controller) inferred from the hwmon sysfs path."""
+def hwmon_device_identity(base: Path) -> dict[str, str | None]:
+    """Infer storage, network and PCI ownership from a resolved hwmon path."""
     try:
-        resolved = str(base.resolve())
+        resolved = str(base.resolve()).replace("\\", "/")
     except OSError:
-        resolved = str(base)
+        resolved = str(base).replace("\\", "/")
     m = re.search(r"/block/([^/]+)", resolved)
     block = m.group(1) if m else None
     m = re.search(r"/nvme/(nvme\d+)(?:/|$)", resolved)
     controller = m.group(1) if m else None
-    return block, controller
+    m = re.search(r"/net/([^/]+)(?:/|$)", resolved)
+    network_interface = m.group(1) if m else None
+    return {
+        "block_device": block,
+        "nvme_controller": controller,
+        "network_interface": network_interface,
+        "pci_address": pci_address_from_path(resolved),
+    }
+
+
+def hwmon_block_identity(base: Path) -> tuple[str | None, str | None]:
+    """Return (block_device, nvme_controller) inferred from the hwmon sysfs path."""
+    identity = hwmon_device_identity(base)
+    return identity["block_device"], identity["nvme_controller"]
 
 
 def read_temperatures(base: Path, chip: str) -> list[dict[str, Any]]:
     sensors: list[dict[str, Any]] = []
-    block_device, nvme_controller = hwmon_block_identity(base)
+    identity = hwmon_device_identity(base)
     paths = sorted(
         base.glob("temp*_input"),
         key=lambda x: int(re.search(r"temp(\d+)_", x.name).group(1)) if re.search(r"temp(\d+)_", x.name) else 999,
@@ -152,8 +173,52 @@ def read_temperatures(base: Path, chip: str) -> list[dict[str, Any]]:
                 "celsius": round(celsius, 1),
                 "max_c": (read_int(base / f"temp{idx}_max") or 0) / 1000.0 or None,
                 "crit_c": (read_int(base / f"temp{idx}_crit") or 0) / 1000.0 or None,
-                "block_device": block_device,
-                "nvme_controller": nvme_controller,
+                **identity,
+            }
+        )
+    return sensors
+
+
+def read_voltages(base: Path, chip: str, cfg: dict[str, Any]) -> list[dict[str, Any]]:
+    """Read standard hwmon voltage inputs, whose sysfs unit is millivolts."""
+    sensors: list[dict[str, Any]] = []
+    identity = hwmon_device_identity(base)
+    paths = sorted(
+        base.glob("in*_input"),
+        key=lambda x: int(re.search(r"in(\d+)_", x.name).group(1)) if re.search(r"in(\d+)_", x.name) else 999,
+    )
+    configured_labels = cfg.get("voltage_labels", {})
+    if not isinstance(configured_labels, dict):
+        configured_labels = {}
+    for p in paths:
+        m = re.match(r"in(\d+)_input", p.name)
+        if not m:
+            continue
+        idx = int(m.group(1))
+        raw = read_int(p)
+        if raw is None:
+            continue
+        key = f"in{idx}"
+        configured = configured_labels.get(f"{chip}:{key}") or configured_labels.get(key)
+        label = safe_name(configured or read_text(base / f"in{idx}_label"), f"Voltage {idx}")
+
+        def optional_volts(suffix: str) -> float | None:
+            value = read_int(base / f"in{idx}_{suffix}")
+            return round(value / 1000.0, 3) if value is not None else None
+
+        sensors.append(
+            {
+                "id": f"{chip}:in{idx}:{base.name}",
+                "chip": chip,
+                "index": idx,
+                "kernel_name": key,
+                "label": label,
+                "volts": round(raw / 1000.0, 3),
+                "min_v": optional_volts("min"),
+                "max_v": optional_volts("max"),
+                "lcrit_v": optional_volts("lcrit"),
+                "crit_v": optional_volts("crit"),
+                **identity,
             }
         )
     return sensors
@@ -162,6 +227,9 @@ def read_temperatures(base: Path, chip: str) -> list[dict[str, Any]]:
 def read_fans(base: Path, chip: str, cfg: dict[str, Any]) -> list[dict[str, Any]]:
     fans: list[dict[str, Any]] = []
     indices: set[int] = set()
+    configured_fan_labels = cfg.get("fan_labels", {})
+    if not isinstance(configured_fan_labels, dict):
+        configured_fan_labels = {}
     for p in base.glob("fan*_input"):
         m = re.match(r"fan(\d+)_input", p.name)
         if m:
@@ -177,7 +245,7 @@ def read_fans(base: Path, chip: str, cfg: dict[str, Any]) -> list[dict[str, Any]
         pwm = read_int(base / f"pwm{idx}")
         pwm_percent = round((pwm or 0) * 100 / 255) if pwm is not None else None
         kernel_label = read_text(base / f"fan{idx}_label")
-        configured_label = cfg.get("fan_labels", {}).get(fan_key)
+        configured_label = configured_fan_labels.get(fan_key)
         label = safe_name(configured_label or kernel_label, fan_key)
         pwm_path = base / f"pwm{idx}"
         writable = os.access(pwm_path, os.W_OK) if pwm_path.exists() else False
@@ -295,6 +363,60 @@ def read_diskstats_raw() -> dict[str, tuple[int, int]]:
     return result
 
 
+def read_physical_network_raw() -> dict[str, dict[str, Any]]:
+    """Read device-backed host interfaces and their cumulative sysfs counters."""
+    result: dict[str, dict[str, Any]] = {}
+    base = SYS_ROOT / "class" / "net"
+    try:
+        interfaces = list(base.iterdir())
+    except OSError:
+        return result
+
+    for interface in interfaces:
+        name = interface.name
+        if name == "lo":
+            continue
+        device_link = interface / "device"
+        try:
+            device_path = device_link.resolve(strict=True)
+        except OSError:
+            # Excludes loopback, bridges, veth pairs and other virtual interfaces.
+            continue
+        resolved = str(device_path).replace("\\", "/")
+        try:
+            driver = (device_link / "driver").resolve(strict=True).name
+        except OSError:
+            driver = ""
+
+        def counter(key: str) -> int:
+            return read_int(interface / "statistics" / key) or 0
+
+        speed = read_int(interface / "speed")
+        if speed is not None and speed < 0:
+            speed = None
+        result[name] = {
+            "name": name,
+            "driver": driver,
+            "pci_address": pci_address_from_path(resolved),
+            "kind": "wifi" if (interface / "wireless").exists() else "ethernet",
+            "mac_address": read_text(interface / "address"),
+            "operstate": safe_name(read_text(interface / "operstate"), "unknown"),
+            "carrier": read_int(interface / "carrier"),
+            "speed_mbps": speed,
+            "duplex": read_text(interface / "duplex"),
+            "mtu": read_int(interface / "mtu"),
+            "rx_bytes": counter("rx_bytes"),
+            "tx_bytes": counter("tx_bytes"),
+            "rx_packets": counter("rx_packets"),
+            "tx_packets": counter("tx_packets"),
+            "rx_errors": counter("rx_errors"),
+            "tx_errors": counter("tx_errors"),
+            "rx_dropped": counter("rx_dropped"),
+            "tx_dropped": counter("tx_dropped"),
+        }
+    return result
+
+
 def extract_container_id(cgroup_text: str) -> str | None:
     """Extract a Docker-style container ID from a process cgroup path."""
     matches = re.findall(r"(?<![0-9a-f])([0-9a-f]{64})(?![0-9a-f])", cgroup_text.lower())
@@ -305,7 +427,10 @@ def read_netns_id(pid_path: Path) -> str | None:
     try:
         target = os.readlink(pid_path / "ns" / "net")
     except OSError:
-        return None
+        # A plain-text fallback keeps synthetic telemetry fixtures portable.
+        target = read_text(pid_path / "ns" / "net")
+        if not target:
+            return None
     m = re.match(r"net:\[(\d+)\]", target)
     return m.group(1) if m else target
 
@@ -419,8 +544,13 @@ def read_process_raw() -> dict[int, dict[str, Any]]:
         statm = read_text(p / "statm")
         if statm:
             try:
-                rss_bytes = int(statm.split()[1]) * os.sysconf("SC_PAGE_SIZE")
-            except (ValueError, IndexError, OSError):
+                rss_pages = int(statm.split()[1])
+                try:
+                    page_size = int(os.sysconf("SC_PAGE_SIZE"))
+                except (ValueError, OSError, AttributeError):
+                    page_size = 4096
+                rss_bytes = rss_pages * page_size
+            except (ValueError, IndexError):
                 pass
         cmd_raw = b""
         try:
@@ -553,9 +683,10 @@ class RuntimeSampler:
         self.prev_disks: dict[str, tuple[int, int]] = {}
         self.prev_processes: dict[int, dict[str, Any]] = {}
         self.prev_network: dict[str, tuple[int, int]] = {}
+        self.prev_interfaces: dict[str, tuple[int, int]] = {}
         try:
             self.clk_tck = int(os.sysconf("SC_CLK_TCK"))
-        except (ValueError, OSError):
+        except (ValueError, OSError, AttributeError):
             self.clk_tck = 100
 
     def sample(self, total_memory: int, gpu_process_vram: dict[int, int]) -> dict[str, Any]:
@@ -585,6 +716,23 @@ class RuntimeSampler:
                     "model": block_model(name),
                     "read_mbps": round(read_mbps, 2),
                     "write_mbps": round(write_mbps, 2),
+                }
+            )
+
+        current_interfaces = read_physical_network_raw()
+        network_interfaces: list[dict[str, Any]] = []
+        for name, current in sorted(current_interfaces.items()):
+            previous = self.prev_interfaces.get(name)
+            rx_mbps = tx_mbps = 0.0
+            if dt is not None and previous:
+                rx_mbps = max(0.0, (current["rx_bytes"] - previous[0]) / dt / 1_000_000)
+                tx_mbps = max(0.0, (current["tx_bytes"] - previous[1]) / dt / 1_000_000)
+            network_interfaces.append(
+                {
+                    **current,
+                    "rx_mbps": round(rx_mbps, 2),
+                    "tx_mbps": round(tx_mbps, 2),
+                    "temperature_c": None,
                 }
             )
 
@@ -683,11 +831,15 @@ class RuntimeSampler:
         self.prev_disks = current_disks
         self.prev_processes = current_processes
         self.prev_network = current_network
+        self.prev_interfaces = {
+            name: (int(item["rx_bytes"]), int(item["tx_bytes"])) for name, item in current_interfaces.items()
+        }
 
         return {
             "cpu_percent": cpu_percent,
             "load": read_loadavg(),
             "disks": disks,
+            "network_interfaces": network_interfaces,
             "processes": processes_sorted[:PROCESS_LIMIT],
             "top_cpu": top_cpu,
             "top_memory": top_memory,
@@ -718,6 +870,31 @@ def attach_disk_temperatures(disks: list[dict[str, Any]], temps: list[dict[str, 
         disk["temperature_c"] = round(temp, 1) if temp is not None else None
 
 
+def is_network_hwmon(chip: str) -> bool:
+    chip = chip.lower()
+    return chip.startswith(("r8169", "igc", "ixgbe", "i40e", "ice", "mlx", "bnxt", "tg3"))
+
+
+def attach_network_temperatures(interfaces: list[dict[str, Any]], temps: list[dict[str, Any]]) -> None:
+    by_interface: dict[str, float] = {}
+    by_pci: dict[str, float] = {}
+    for sensor in temps:
+        value = sensor.get("celsius")
+        if value is None:
+            continue
+        interface = sensor.get("network_interface")
+        pci_address = sensor.get("pci_address")
+        if interface:
+            by_interface[str(interface)] = max(by_interface.get(str(interface), -math.inf), float(value))
+        if pci_address:
+            by_pci[str(pci_address)] = max(by_pci.get(str(pci_address), -math.inf), float(value))
+    for interface in interfaces:
+        value = by_interface.get(interface["name"])
+        if value is None and interface.get("pci_address"):
+            value = by_pci.get(str(interface["pci_address"]))
+        interface["temperature_c"] = round(value, 1) if value is not None else None
+
+
 nvidia_monitor = NvidiaMonitor()
 runtime_sampler = RuntimeSampler()
 
@@ -727,19 +904,34 @@ def read_all_sensors() -> dict[str, Any]:
     devices = []
     cpu_temps: list[dict[str, Any]] = []
     motherboard_temps: list[dict[str, Any]] = []
+    network_temps: list[dict[str, Any]] = []
     other_temps: list[dict[str, Any]] = []
     fans: list[dict[str, Any]] = []
+    voltages: list[dict[str, Any]] = []
 
     for d in hwmon_dirs():
         chip = safe_name(read_text(d / "name"), d.name)
         temps = read_temperatures(d, chip)
         chip_fans = read_fans(d, chip, cfg)
-        devices.append({"name": chip, "path": str(d), "temperatures": len(temps), "fans": len(chip_fans)})
+        chip_voltages = read_voltages(d, chip, cfg)
+        voltages.extend(chip_voltages)
+        devices.append(
+            {
+                "name": chip,
+                "path": str(d),
+                "temperatures": len(temps),
+                "fans": len(chip_fans),
+                "voltages": len(chip_voltages),
+            }
+        )
 
         if chip == "coretemp" or chip.startswith("k10temp") or chip.startswith("zenpower"):
             cpu_temps.extend(temps)
         elif chip.startswith("nct668"):
             motherboard_temps.extend(temps)
+            fans.extend(chip_fans)
+        elif is_network_hwmon(chip):
+            network_temps.extend(temps)
             fans.extend(chip_fans)
         else:
             other_temps.extend(temps)
@@ -749,6 +941,12 @@ def read_all_sensors() -> dict[str, Any]:
     gpu, gpu_process_vram = nvidia_monitor.snapshot()
     runtime = runtime_sampler.sample(memory.get("total_bytes", 0), gpu_process_vram)
     attach_disk_temperatures(runtime["disks"], other_temps)
+    attach_network_temperatures(runtime["network_interfaces"], network_temps)
+    configured_network_labels = cfg.get("network_labels", {})
+    if not isinstance(configured_network_labels, dict):
+        configured_network_labels = {}
+    for interface in runtime["network_interfaces"]:
+        interface["label"] = safe_name(configured_network_labels.get(interface["name"]), interface["name"])
 
     cpu_hottest = max((x["celsius"] for x in cpu_temps), default=None)
     motherboard_hottest = max((x["celsius"] for x in motherboard_temps), default=None)
@@ -772,12 +970,15 @@ def read_all_sensors() -> dict[str, Any]:
         "gpu": gpu,
         "motherboard": {"temperatures": motherboard_temps, "hottest_c": motherboard_hottest},
         "fans": fans,
+        "voltages": voltages,
         "disks": runtime["disks"],
+        "network_interfaces": runtime["network_interfaces"],
         "processes": runtime["processes"],
         "top_cpu": runtime["top_cpu"],
         "top_memory": runtime["top_memory"],
         "top_disk": runtime["top_disk"],
         "top_network": runtime["top_network"],
+        "network_temperatures": network_temps,
         "other_temperatures": other_temps,
         "devices": devices,
         "physical_headers": cfg.get("physical_headers", []),
@@ -792,9 +993,16 @@ class History:
     def append_snapshot(self, snap: dict[str, Any]) -> None:
         ts = float(snap["timestamp"])
         values: dict[str, float] = {}
-        for group in (snap["cpu"]["temperatures"], snap["motherboard"]["temperatures"], snap["other_temperatures"]):
+        for group in (
+            snap["cpu"]["temperatures"],
+            snap["motherboard"]["temperatures"],
+            snap.get("network_temperatures", []),
+            snap["other_temperatures"],
+        ):
             for s in group:
                 values[s["id"]] = float(s["celsius"])
+        for voltage in snap.get("voltages", []):
+            values[voltage["id"]] = float(voltage["volts"])
         for fan in snap["fans"]:
             if fan["rpm"] is not None:
                 values[fan["id"]] = float(fan["rpm"])
@@ -813,6 +1021,12 @@ class History:
             values[f"disk:{name}:write"] = float(disk["write_mbps"])
             if disk.get("temperature_c") is not None:
                 values[f"disk:{name}:temp"] = float(disk["temperature_c"])
+        for interface in snap.get("network_interfaces", []):
+            name = interface["name"]
+            values[f"net:{name}:rx"] = float(interface["rx_mbps"])
+            values[f"net:{name}:tx"] = float(interface["tx_mbps"])
+            if interface.get("temperature_c") is not None:
+                values[f"net:{name}:temp"] = float(interface["temperature_c"])
 
         with self._lock:
             for key, value in values.items():
@@ -860,7 +1074,10 @@ def startup() -> None:
 @app.get("/", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     html_path = Path(__file__).parent / "static" / "index.html"
-    return HTMLResponse(html_path.read_text(), headers={"Cache-Control": "no-store, no-cache, must-revalidate"})
+    return HTMLResponse(
+        html_path.read_text(encoding="utf-8"),
+        headers={"Cache-Control": "no-store, no-cache, must-revalidate"},
+    )
 
 
 @app.get("/api/status")

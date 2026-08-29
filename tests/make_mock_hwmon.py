@@ -2,10 +2,12 @@ from pathlib import Path
 import json
 import os
 import shutil
+import subprocess
 
-sysroot = Path('/tmp/mock-sys')
-procroot = Path('/tmp/mock-proc')
-dockerroot = Path('/tmp/mock-docker')
+mock_root = Path(os.getenv('MOCK_ROOT', '/tmp'))
+sysroot = mock_root / 'mock-sys'
+procroot = mock_root / 'mock-proc'
+dockerroot = mock_root / 'mock-docker'
 shutil.rmtree(sysroot, ignore_errors=True)
 shutil.rmtree(procroot, ignore_errors=True)
 shutil.rmtree(dockerroot, ignore_errors=True)
@@ -15,13 +17,26 @@ procroot.mkdir(parents=True, exist_ok=True)
 dockerroot.mkdir(parents=True, exist_ok=True)
 
 
+def link_directory(target: Path, link: Path):
+    try:
+        os.symlink(target, link, target_is_directory=True)
+    except OSError:
+        if os.name != 'nt':
+            raise
+        subprocess.run(
+            ['cmd', '/c', 'mklink', '/J', str(link), str(target.resolve())],
+            check=True,
+            capture_output=True,
+        )
+
+
 def put_dir(path: Path, name: str, files: dict[str, object]):
     path.mkdir(parents=True, exist_ok=True)
     (path / 'name').write_text(name + '\n')
     for k, v in files.items():
         fp = path / k
         fp.write_text(str(v) + '\n')
-        if k.startswith('pwm'):
+        if k.startswith('pwm') and os.name != 'nt':
             fp.chmod(0o444)
 
 
@@ -44,12 +59,46 @@ put_hwmon('hwmon1', 'nct6686', {
     'fan4_input': 805, 'pwm4': 45,
     'fan5_input': 0, 'pwm5': 0,
     'fan6_input': 4000, 'pwm6': 110,
+    'in0_input': 0, 'in0_label': 'VIN16',
+    'in1_input': 768, 'in1_label': 'VIN0',
+    'in2_input': 992, 'in2_label': 'VIN1',
+    'in3_input': 992, 'in3_label': 'VIN2',
+    'in4_input': 1680, 'in4_label': 'VIN3',
+    'in5_input': 1040, 'in5_label': 'VIN5',
+    'in6_input': 1120, 'in6_label': 'VIN6',
+    'in7_input': 1344, 'in7_label': 'VIN7',
 })
 
 # Make drivetemp resemble real sysfs so the monitor can map temp -> sda.
 drive_hwmon = sysroot / 'devices' / 'mock' / 'block' / 'sda' / 'device' / 'hwmon' / 'hwmon2'
 put_dir(drive_hwmon, 'drivetemp', {'temp1_input': 34000, 'temp1_label': 'Composite'})
-os.symlink('../../devices/mock/block/sda/device/hwmon/hwmon2', base / 'hwmon2')
+link_directory(drive_hwmon, base / 'hwmon2')
+
+# Make a NIC hwmon sensor and physical interface share the same PCI owner.
+# Windows cannot create colon-containing fixture paths, so use an equivalent mock spelling.
+pci_root_name = 'pci0000_00' if os.name == 'nt' else 'pci0000:00'
+pci_device_name = '0000_06_00.0' if os.name == 'nt' else '0000:06:00.0'
+nic_pci = sysroot / 'devices' / pci_root_name / pci_device_name
+nic_hwmon = nic_pci / 'hwmon' / 'hwmon3'
+put_dir(nic_hwmon, 'r8169_0_600:00', {'temp1_input': 31000})
+link_directory(nic_hwmon, base / 'hwmon3')
+
+interface = sysroot / 'class' / 'net' / 'enp6s0'
+(interface / 'statistics').mkdir(parents=True)
+link_directory(nic_pci, interface / 'device')
+(interface / 'address').write_text('00:11:22:33:44:55\n')
+(interface / 'operstate').write_text('up\n')
+(interface / 'carrier').write_text('1\n')
+(interface / 'speed').write_text('2500\n')
+(interface / 'duplex').write_text('full\n')
+(interface / 'mtu').write_text('1500\n')
+for key, value in {
+    'rx_bytes': 1000000, 'tx_bytes': 2000000,
+    'rx_packets': 1000, 'tx_packets': 2000,
+    'rx_errors': 0, 'tx_errors': 0,
+    'rx_dropped': 0, 'tx_dropped': 0,
+}.items():
+    (interface / 'statistics' / key).write_text(f'{value}\n')
 
 (sysroot / 'block' / 'sda' / 'device').mkdir(parents=True, exist_ok=True)
 (sysroot / 'block' / 'sda' / 'device' / 'vendor').write_text('ATA\n')
@@ -90,7 +139,10 @@ rest = ['S','1','1','1','0','0','0','0','0','0','0','100','20','0','0','0','0','
 (p / 'io').write_text('read_bytes: 1000000\nwrite_bytes: 2000000\n')
 (p / 'cgroup').write_text(f'0::/docker/{cid}\n')
 (p / 'ns').mkdir()
-os.symlink('net:[4026532999]', p / 'ns' / 'net')
+if os.name == 'nt':
+    (p / 'ns' / 'net').write_text('net:[4026532999]\n')
+else:
+    os.symlink('net:[4026532999]', p / 'ns' / 'net')
 (p / 'net').mkdir()
 (p / 'net' / 'dev').write_text(
     'Inter-|   Receive                                                |  Transmit\n'
